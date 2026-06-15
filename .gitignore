@@ -1,0 +1,28 @@
+# ===== 系统 / 通用 =====
+.DS_Store
+Thumbs.db
+*.log
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+
+# ===== Claude Code 本地配置 =====
+.claude/
+
+# ===== 后端:Java / Maven =====
+target/
+# OSS 密钥等本地配置,双保险(子目录 .gitignore 已忽略)
+**/application-local.yml
+# 运行时上传目录
+secondhand-platform/uploads/
+
+# ===== 前端:Node / Vite =====
+node_modules/
+dist/
+.vite/
+*.local
+
+# ===== 临时文件 =====
+**/temp_img.png
