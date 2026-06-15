@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secondhand.mapper.ProductMapper">
+
+    <!-- 分页查询商品列表（多条件筛选 + 排序 + 关联卖家信息和分类名） -->
+    <select id="selectPageWithDetails" resultType="com.secondhand.entity.Product">
+        SELECT
+            p.*,
+            u.nickname AS seller_nickname,
+            u.username AS seller_username,
+            u.avatar AS seller_avatar,
+            c.name AS category_name
+        FROM product p
+        LEFT JOIN user u ON p.seller_id = u.id
+        LEFT JOIN category c ON p.category_id = c.id
+        <where>
+            <if test="status != null">
+                AND p.status = #{status}
+            </if>
+            <if test="sellerId != null">
+                AND p.seller_id = #{sellerId}
+            </if>
+            <if test="categoryId != null">
+                AND (
+                    p.category_id = #{categoryId}
+                    OR p.category_id IN (
+                        SELECT id FROM category WHERE parent_id = #{categoryId}
+                    )
+                )
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND p.title LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="minPrice != null">
+                AND p.price &gt;= #{minPrice}
+            </if>
+            <if test="maxPrice != null">
+                AND p.price &lt;= #{maxPrice}
+            </if>
+            <if test="conditionLevel != null">
+                AND p.condition_level = #{conditionLevel}
+            </if>
+        </where>
+        <choose>
+            <when test="sort == 'price_asc'">
+                ORDER BY p.price ASC
+            </when>
+            <when test="sort == 'price_desc'">
+                ORDER BY p.price DESC
+            </when>
+            <when test="sort == 'hottest'">
+                ORDER BY p.view_count DESC, p.create_time DESC
+            </when>
+            <otherwise>
+                ORDER BY p.create_time DESC
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- 查询单个商品详情（关联卖家信息和分类名） -->
+    <select id="selectByIdWithDetails" resultType="com.secondhand.entity.Product">
+        SELECT
+            p.*,
+            u.nickname AS seller_nickname,
+            u.username AS seller_username,
+            u.avatar AS seller_avatar,
+            c.name AS category_name
+        FROM product p
+        LEFT JOIN user u ON p.seller_id = u.id
+        LEFT JOIN category c ON p.category_id = c.id
+        WHERE p.id = #{productId}
+    </select>
+
+</mapper>

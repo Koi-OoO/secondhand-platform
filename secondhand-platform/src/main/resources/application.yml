@@ -1,0 +1,54 @@
+server:
+  port: 8080
+
+spring:
+  config:
+    import: optional:classpath:application-local.yml
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/secondhand?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  redis:
+    host: localhost
+    port: 6379
+    database: 2
+
+  session:
+    store-type: redis
+    timeout: 7d
+    redis:
+      namespace: secondhand:session
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 100MB
+
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+
+# SpringDoc OpenAPI 3
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  packages-to-scan: com.secondhand.controller
+
+# 应用自定义配置
+app:
+  oss:
+    endpoint: ${ALIYUN_OSS_ENDPOINT:}
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${ALIYUN_OSS_BUCKET_NAME:}
+  upload:
+    local-path: ${APP_UPLOAD_LOCAL_PATH:uploads}

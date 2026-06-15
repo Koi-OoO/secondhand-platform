@@ -1,0 +1,100 @@
+// ============================================
+// Element Plus 主题覆盖
+// ============================================
+@use './variables.scss' as *;
+
+// === 全局主题色：把 Element Plus 默认蓝改成品牌珊瑚色 ===
+// 统一分页、分段控件、勾选框、单选、开关、日期选择器等所有组件的强调色
+:root {
+  --el-color-primary: #{$color-primary};
+  --el-color-primary-light-3: #{$color-primary-light};
+  --el-color-primary-light-5: #f6bca9;
+  --el-color-primary-light-7: #f9d2c5;
+  --el-color-primary-light-8: #fbe0d8;
+  --el-color-primary-light-9: #{$color-primary-lighter};
+  --el-color-primary-dark-2: #{$color-primary-dark};
+}
+
+// === 按钮 ===
+.el-button--primary {
+  --el-button-bg-color: #{$color-primary};
+  --el-button-border-color: #{$color-primary};
+  --el-button-hover-bg-color: #{$color-primary-dark};
+  --el-button-hover-border-color: #{$color-primary-dark};
+  --el-button-active-bg-color: #{$color-primary-dark};
+  --el-button-active-border-color: #{$color-primary-dark};
+  border-radius: $radius-md;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all $transition-normal;
+
+  &:hover {
+    box-shadow: $shadow-button;
+    transform: translateY(-1px);
+  }
+}
+
+.el-button--default {
+  border-radius: $radius-md;
+}
+
+// === 输入框 ===
+.el-input {
+  --el-input-border-radius: #{$radius-md};
+  --el-input-focus-border-color: #{$color-primary};
+  --el-input-border-color: #{$color-border};
+}
+
+.el-input__wrapper {
+  border-radius: $radius-md;
+  box-shadow: none;
+  border: 1px solid $color-border;
+  transition: all $transition-normal;
+
+  &:hover {
+    border-color: $color-primary-light;
+  }
+
+  &.is-focus {
+    border-color: $color-primary;
+    box-shadow: 0 0 0 3px rgba($color-primary, 0.1);
+  }
+}
+
+// === 消息提示 ===
+.el-message {
+  border-radius: $radius-md;
+  box-shadow: $shadow-lg;
+}
+
+// === 卡片 ===
+.el-card {
+  border-radius: $radius-lg;
+  border-color: $color-border-light;
+  box-shadow: $shadow-card;
+}
+
+// === 对话框 ===
+.el-dialog {
+  border-radius: $radius-xl;
+}
+
+// === 标签 ===
+.el-tag {
+  border-radius: $radius-sm;
+}
+
+// === 头像 ===
+.el-avatar {
+  --el-avatar-bg-color: #{$color-primary-lighter};
+}
+
+// === 选项卡 ===
+.el-tabs__active-bar {
+  background-color: $color-primary;
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: $color-primary;
+}
