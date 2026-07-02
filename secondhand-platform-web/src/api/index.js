@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 const http = axios.create({
   baseURL: '/api',
   timeout: 30000,
+  withCredentials: true,  // 跨域请求携带 Cookie（Session 鉴权需要）
   headers: {}
 })
 

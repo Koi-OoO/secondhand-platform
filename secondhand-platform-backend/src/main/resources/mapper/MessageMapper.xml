@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secondhand.mapper.MessageMapper">
+
+    <!--
+      聚合「我」参与的所有会话：
+      子查询先把每条消息归到「对方 id」(peer_id：我发出的取 to，我收到的取 from)，
+      外层按对方分组，取该会话最后一条消息 id 与我的未读数，按最后消息倒序。
+    -->
+    <select id="selectConversationSummaries" resultType="java.util.Map">
+        SELECT
+            peer_id AS peerId,
+            MAX(id) AS lastId,
+            SUM(CASE WHEN to_user_id = #{me} AND is_read = 0 THEN 1 ELSE 0 END) AS unreadCount
+        FROM (
+            SELECT
+                id,
+                CASE WHEN from_user_id = #{me} THEN to_user_id ELSE from_user_id END AS peer_id,
+                to_user_id,
+                is_read
+            FROM message
+            WHERE from_user_id = #{me} OR to_user_id = #{me}
+        ) t
+        GROUP BY peer_id
+        ORDER BY lastId DESC
+    </select>
+
+</mapper>

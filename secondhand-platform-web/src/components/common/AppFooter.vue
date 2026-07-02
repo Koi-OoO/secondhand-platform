@@ -2,7 +2,7 @@
   <footer class="app-footer">
     <div class="app-footer__inner container">
       <div class="app-footer__brand">
-        <span class="footer-logo">闲物</span>
+        <span class="footer-logo">校园闲物</span>
         <p>让闲置物品找到新的主人</p>
       </div>
       <div class="app-footer__links">
@@ -12,7 +12,7 @@
         <span>隐私政策</span>
       </div>
       <div class="app-footer__copy">
-        © 2026 闲物二手交易平台
+        © 2026 校园闲物 — 校园二手交易平台
       </div>
     </div>
   </footer>

@@ -17,6 +17,7 @@ target/
 **/application-local.yml
 # 运行时上传目录
 secondhand-platform/uploads/
+secondhand-platform-backend/uploads/
 
 # ===== 前端:Node / Vite =====
 node_modules/

@@ -1,9 +1,9 @@
 <template>
   <header class="app-header" :class="{ 'app-header--scrolled': scrolled }">
     <div class="app-header__inner container">
-      <router-link to="/" class="app-header__logo" aria-label="闲物首页">
-        <span class="logo-icon">闲</span>
-        <span class="logo-text">闲物</span>
+      <router-link to="/" class="app-header__logo" aria-label="校园闲物首页">
+        <span class="logo-icon">校</span>
+        <span class="logo-text">校园闲物</span>
       </router-link>
 
       <nav class="app-header__nav" aria-label="主导航">

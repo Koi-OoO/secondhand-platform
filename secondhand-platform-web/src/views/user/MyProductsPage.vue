@@ -57,6 +57,17 @@
               上架
             </el-button>
             <span v-if="item.status === 3" class="sold-label">已售出</span>
+            <el-button
+              v-if="item.status === 2 || item.status === 3"
+              type="danger"
+              size="small"
+              plain
+              :loading="actionLoading[item.id] === 'delete'"
+              :disabled="!!actionLoading[item.id]"
+              @click="handleDelete(item)"
+            >
+              删除
+            </el-button>
           </div>
         </div>
       </div>
@@ -74,7 +85,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getProductPage, offShelfProduct, onShelfProduct } from '@/api/product'
+import { getProductPage, offShelfProduct, onShelfProduct, deleteProduct } from '@/api/product'
 import { useUserStore } from '@/stores/user'
 import { formatPrice, formatDate } from '@/utils/format'
 import { PRODUCT_STATUS, PRODUCT_STATUS_COLOR } from '@/utils/constant'
@@ -142,6 +153,24 @@ async function handleOnShelf(item) {
     await onShelfProduct(item.id)
     ElMessage.success('上架成功')
     item.status = 1
+  } catch { /* 取消或接口错误 */ }
+  finally {
+    delete actionLoading.value[item.id]
+  }
+}
+
+async function handleDelete(item) {
+  if (!item?.id || actionLoading.value[item.id]) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${item.title}」吗？删除后不可恢复。`,
+      '确认删除',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'error' }
+    )
+    actionLoading.value[item.id] = 'delete'
+    await deleteProduct(item.id)
+    ElMessage.success('已删除')
+    products.value = products.value.filter(p => p.id !== item.id)
   } catch { /* 取消或接口错误 */ }
   finally {
     delete actionLoading.value[item.id]

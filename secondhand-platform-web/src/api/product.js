@@ -72,3 +72,8 @@ export function getFavoriteStatus(id) {
 export function reportProduct(id, reason, detail) {
   return http.post(`/product/${id}/report`, null, { params: { reason, detail } })
 }
+
+/** 卖家删除商品（仅限已下架或已售出） */
+export function deleteProduct(id) {
+  return http.delete(`/product/${id}`)
+}

@@ -3,9 +3,9 @@
     <!-- 左侧装饰 -->
     <div class="auth-visual">
       <div class="auth-visual__inner">
-        <div class="visual-badge">闲物</div>
+        <div class="visual-badge">校园闲物</div>
         <h1>发现你的<br>第一件好物</h1>
-        <p>注册闲物，开启闲置物品的循环之旅</p>
+        <p>注册校园闲物，开启校园闲置交易</p>
         <div class="visual-features">
           <div class="feat-item">
             <el-icon><CircleCheck /></el-icon>
@@ -28,7 +28,7 @@
       <div class="auth-form-card">
         <div class="auth-form__header">
           <h2>创建账号</h2>
-          <p>填写信息，加入闲物社区</p>
+          <p>填写信息，加入校园闲物</p>
         </div>
 
         <el-form

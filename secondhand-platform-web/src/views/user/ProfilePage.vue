@@ -57,6 +57,10 @@
           <span class="detail-value">{{ userStore.userInfo?.address || '未设置' }}</span>
         </div>
         <div class="detail-item">
+          <span class="detail-label">校区</span>
+          <span class="detail-value">{{ userStore.userInfo?.campus || '未设置' }}</span>
+        </div>
+        <div class="detail-item">
           <span class="detail-label">生日</span>
           <span class="detail-value">{{ birthdayDisplay }}</span>
         </div>

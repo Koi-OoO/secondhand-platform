@@ -277,7 +277,6 @@ const tabOptions = [
 ]
 
 const statusMap = {
-  0: '待付款',
   1: '待发货',
   2: '待收货',
   3: '已完成',
@@ -320,7 +319,7 @@ function handleTabChange(value) {
 }
 
 function statusColor(status) {
-  return { 0: 'warning', 1: 'primary', 2: 'primary', 3: 'success', 4: 'info' }[status] || 'info'
+  return { 1: 'primary', 2: 'primary', 3: 'success', 4: 'info' }[status] || 'info'
 }
 
 function orderStatusText(order) {

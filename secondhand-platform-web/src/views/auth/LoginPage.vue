@@ -3,7 +3,7 @@
     <!-- 左侧装饰区 -->
     <div class="auth-visual">
       <div class="auth-visual__inner">
-        <div class="visual-badge">闲物</div>
+        <div class="visual-badge">校园闲物</div>
         <h1>让好物<br>找到新主人</h1>
         <p>每一件闲置，都在等待它的下一段旅程</p>
         <div class="visual-stats">
@@ -24,7 +24,7 @@
       <div class="auth-form-card">
         <div class="auth-form__header">
           <h2>欢迎回来</h2>
-          <p>登录你的闲物账号</p>
+          <p>登录你的校园闲物账号</p>
         </div>
 
         <div v-if="userStore.loginError" class="auth-error">{{ userStore.loginError }}</div>

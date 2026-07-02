@@ -64,6 +64,10 @@
           <el-form-item label="地址">
             <el-input v-model="form.address" placeholder="填写地址" maxlength="255" />
           </el-form-item>
+
+          <el-form-item label="校区">
+            <el-input v-model="form.campus" placeholder="例如：东校区信息工程学院" maxlength="100" />
+          </el-form-item>
         </div>
 
         <div class="form-actions">
@@ -95,7 +99,8 @@ const form = reactive({
   email: '',
   gender: 0,
   birthday: '',
-  address: ''
+  address: '',
+  campus: ''
 })
 
 onMounted(() => {
@@ -108,6 +113,7 @@ onMounted(() => {
     form.gender = u.gender ?? 0
     form.birthday = u.birthday || ''
     form.address = u.address || ''
+    form.campus = u.campus || ''
   }
 })
 

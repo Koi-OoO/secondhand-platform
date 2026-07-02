@@ -56,6 +56,11 @@
               <span class="meta-item">{{ relativeTime(product.createTime) }}</span>
             </div>
 
+            <div v-if="product.tradeLocation" class="trade-location">
+              <el-icon><Location /></el-icon>
+              <span>{{ product.tradeLocation }}</span>
+            </div>
+
             <div class="seller-box" @click="$router.push(`/seller/${product.sellerId}`)">
               <el-avatar :size="44" :src="product.sellerAvatar">
                 {{ sellerDisplayName[0] }}
@@ -128,7 +133,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ArrowRight, Star, ChatDotRound } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Star, ChatDotRound, Location } from '@element-plus/icons-vue'
 import { addFavorite, getFavoriteStatus, getProductDetail, getProductPage, removeFavorite } from '@/api/product'
 import { createOrder } from '@/api/order'
 import ProductCard from '@/components/common/ProductCard.vue'
@@ -246,9 +251,9 @@ async function onWant() {
     ElMessage.warning('请先登录')
     return
   }
-  const { value: address } = await ElMessageBox.prompt('请输入收货地址', '确认下单', {
+  const { value: address } = await ElMessageBox.prompt('请输入交易地点（如东区食堂门口）', '确认下单', {
     confirmButtonText: '下单',
-    inputValidator: value => (value && value.trim() ? true : '收货地址不能为空')
+    inputValidator: value => (value && value.trim() ? true : '交易地点不能为空')
   }).catch(() => ({ value: null }))
 
   if (!address) {

@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { getUserProfile } from '@/api/user'
 
 const routes = [
   {
@@ -113,15 +115,25 @@ const router = createRouter({
 })
 
 // 鉴权守卫：需要登录的页面校验 session
-router.beforeEach(async (to, from, next) => {
+router.beforeEach((to, from, next) => {
   if (to.matched.some(r => r.meta.requiresAuth)) {
-    try {
-      const { getUserProfile } = await import('@/api/user')
-      await getUserProfile()
+    const userStore = useUserStore()
+
+    // store 中已有登录态 → 直接放行（App.vue onMounted 已恢复 session）
+    if (userStore.isLoggedIn) {
       next()
-    } catch {
-      next({ name: 'Login', query: { redirect: to.fullPath } })
+      return
     }
+
+    // store 中无登录态 → 尝试静默恢复一次 session
+    getUserProfile({ skipAuthRedirect: true })
+      .then(data => {
+        userStore.userInfo = data
+        next()
+      })
+      .catch(() => {
+        next({ name: 'Login', query: { redirect: to.fullPath } })
+      })
   } else {
     next()
   }
