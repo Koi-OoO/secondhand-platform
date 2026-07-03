@@ -1,5 +1,5 @@
 // ============================================
-// 全局样式 — 闲物二手交易平台
+// 全局样式 — 校园闲物 Paper Market
 // ============================================
 @use './variables.scss' as *;
 
@@ -13,21 +13,51 @@
 
 html {
   font-size: 16px;
+  scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  font-family: $font-family;
-  color: $color-text;
-  background-color: $color-bg;
-  line-height: 1.6;
   min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    linear-gradient(90deg, rgba($color-ink, 0.026) 1px, transparent 1px) 0 0 / 36px 36px,
+    linear-gradient(rgba($color-ink, 0.024) 1px, transparent 1px) 0 0 / 36px 36px,
+    radial-gradient(circle at 12px 12px, rgba($color-red, 0.045) 0 1px, transparent 1.5px) 0 0 / 54px 54px,
+    $color-bg;
+  color: $color-text;
+  font-family: $font-family;
+  line-height: $line-height-normal;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba($color-red, 0.42);
+  outline-offset: 3px;
 }
 
 img {
@@ -37,32 +67,38 @@ img {
 
 // === 滚动条 ===
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: $color-paper-3;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: $color-text-muted;
-  border-radius: 3px;
+  background: $color-ink;
+  border-radius: $radius-full;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: $color-text-secondary;
+  background: $color-red-deep;
 }
 
 // === 选中色 ===
 ::selection {
-  background: $color-primary-lighter;
-  color: $color-primary-dark;
+  background: $color-yellow;
+  color: $color-ink;
 }
 
 // === 页面过渡动画 ===
 .page-enter-active {
-  animation: pageEnter 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: pageEnter 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .page-leave-active {
-  animation: pageLeave 0.2s ease;
+  animation: pageLeave 0.18s ease;
 }
+
 @keyframes pageEnter {
   from {
     opacity: 0;
@@ -73,6 +109,7 @@ img {
     transform: translateY(0);
   }
 }
+
 @keyframes pageLeave {
   from {
     opacity: 1;
@@ -82,8 +119,20 @@ img {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 // === 通用容器 ===
 .container {
+  width: 100%;
   max-width: $max-width;
   margin: 0 auto;
   padding: 0 $space-lg;
@@ -91,19 +140,29 @@ img {
 
 // === 通用卡片样式 ===
 .card {
+  position: relative;
   background: $color-bg-card;
+  border: $border-ink;
   border-radius: $radius-lg;
-  border: 1px solid $color-border-light;
-  box-shadow: $shadow-card;
+  box-shadow: $shadow-hard;
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.38), transparent 38%);
 }
 
 // === 页面标题 ===
 .page-title {
-  font-size: $font-size-2xl;
-  font-weight: 700;
-  color: $color-text;
   margin-bottom: $space-lg;
-  letter-spacing: -0.5px;
+  color: $color-text;
+  font-size: $font-size-2xl;
+  font-weight: $font-weight-heavy;
+  letter-spacing: 0;
 }
 
 // === 背景纹理 ===
@@ -112,8 +171,36 @@ img {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    radial-gradient(circle at 20% 80%, rgba($color-primary-light, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba($color-primary-light, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba($color-primary-light, 0.02) 0%, transparent 60%);
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+
+.paper-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: $border-ink;
+  border-radius: $radius-full;
+  background: $color-bg-card;
+  color: $color-text;
+  box-shadow: $shadow-button;
+  font-weight: $font-weight-heavy;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
+
+  &:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: $shadow-hover;
+  }
+
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 $color-ink;
+  }
+}
+
+@media (max-width: $bp-sm) {
+  .container {
+    padding: 0 $space-md;
+  }
 }

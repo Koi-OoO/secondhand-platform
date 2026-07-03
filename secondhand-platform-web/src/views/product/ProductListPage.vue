@@ -2,7 +2,7 @@
   <div class="product-list">
     <section class="market-hero">
       <div>
-        <p class="market-hero__eyebrow">Market</p>
+        <p class="market-hero__eyebrow">MARKET</p>
         <h1>商品广场</h1>
         <p>搜索、筛选和比较正在出售的闲置好物。</p>
       </div>
@@ -225,8 +225,25 @@ const sortOptions = [
   { label: '高价', value: 'price_desc' }
 ]
 
+const currentCategoryName = computed(() => {
+  if (currentCategory.value <= 0) return ''
+  return categories.value.find(cat => cat.id === currentCategory.value)?.name || ''
+})
+
 const activeFilters = computed(() => {
   const r = []
+  if (keyword.value && keyword.value.trim()) {
+    r.push({
+      label: `搜索：${keyword.value.trim()}`,
+      remove: () => { keyword.value = ''; page.value = 1; syncQueryToUrl() }
+    })
+  }
+  if (currentCategoryName.value) {
+    r.push({
+      label: `分类：${currentCategoryName.value}`,
+      remove: () => selectCategory(0)
+    })
+  }
   if (conditionFilter.value > 0) {
     r.push({
       label: CONDITION[conditionFilter.value],
@@ -261,7 +278,7 @@ watch(
 
 function syncFromQuery() {
   currentCategory.value = route.query.categoryId ? Number(route.query.categoryId) : 0
-  keyword.value = route.query.keyword || ''
+  keyword.value = typeof route.query.keyword === 'string' ? route.query.keyword : ''
   sort.value = route.query.sort || 'latest'
   page.value = route.query.page ? Number(route.query.page) : 1
 }
@@ -314,6 +331,7 @@ function toggleCondition(val) {
 }
 
 function applySearch() {
+  keyword.value = keyword.value.trim()
   if (keyword.value) saveHistory(keyword.value)
   page.value = 1
   syncQueryToUrl()
@@ -327,7 +345,7 @@ function applyPriceFilter() {
 function syncQueryToUrl() {
   const q = {}
   if (currentCategory.value > 0) q.categoryId = currentCategory.value
-  if (keyword.value) q.keyword = keyword.value
+  if (keyword.value && keyword.value.trim()) q.keyword = keyword.value.trim()
   if (sort.value !== 'latest') q.sort = sort.value
   if (page.value > 1) q.page = page.value
   router.replace({ query: q })
@@ -387,8 +405,10 @@ async function fetchProducts() {
 @use '@/assets/styles/variables.scss' as *;
 
 .product-list {
-  padding-top: 18px;
-  padding-bottom: $space-2xl;
+  width: 100%;
+  max-width: $max-width;
+  margin: 0 auto;
+  padding: $space-xl $space-lg $space-2xl;
 }
 
 .market-hero {
@@ -396,28 +416,25 @@ async function fetchProducts() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 16px;
+  gap: $space-lg;
+  margin-bottom: $space-lg;
   padding: 30px 32px;
   overflow: hidden;
-  border: 1px solid rgba($color-primary, 0.14);
-  border-radius: $radius-xl;
-  background:
-    radial-gradient(120% 130% at 100% 0%, rgba($color-primary-lighter, 0.9), transparent 48%),
-    linear-gradient(135deg, $color-bg-warm, #fff);
-  box-shadow: 0 14px 38px rgba(224, 122, 95, 0.08);
+  border: $border-ink;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
 
   &::after {
     content: '';
     position: absolute;
-    top: -90px;
-    right: -60px;
-    width: 280px;
-    height: 280px;
+    right: -24px;
+    top: -26px;
+    width: 150px;
+    height: 150px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba($color-primary-light, 0.22), transparent 70%);
-    filter: blur(16px);
-    pointer-events: none;
+    background-image: radial-gradient(rgba($color-ink, 0.17) 1.5px, transparent 1.6px);
+    background-size: 10px 10px;
   }
 
   > div,
@@ -428,10 +445,11 @@ async function fetchProducts() {
 
   h1 {
     color: $color-text;
-    font-size: 31px;
-    font-weight: 800;
+    font-family: $font-family-display;
+    font-size: 36px;
+    font-weight: $font-weight-heavy;
     line-height: 1.2;
-    letter-spacing: -0.4px;
+    letter-spacing: 0;
   }
 
   p {
@@ -443,53 +461,62 @@ async function fetchProducts() {
   display: inline-flex;
   align-items: center;
   margin-bottom: 8px;
-  color: $color-primary-dark;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-
-  &::before {
-    content: '';
-    width: 20px;
-    height: 2px;
-    margin-right: 8px;
-    border-radius: 2px;
-    background: $color-primary;
-  }
+  padding: 3px 10px;
+  border: 1.5px solid $color-red-deep;
+  border-radius: $radius-xs;
+  color: $color-red-deep;
+  font-family: $font-family-mono;
+  font-size: 11px;
+  font-weight: $font-weight-heavy;
+  letter-spacing: 2px;
+  transform: rotate(-1.5deg);
 }
 
 .market-hero__publish {
   display: inline-flex;
-  height: 42px;
+  height: 44px;
   flex-shrink: 0;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   padding: 0 22px;
-  color: #fff;
-  background: linear-gradient(135deg, $color-primary, $color-primary-dark);
+  border: $border-ink;
   border-radius: $radius-full;
-  font-size: 14px;
-  font-weight: 800;
+  background: $color-red;
   box-shadow: $shadow-button;
-  transition: transform $transition-fast, box-shadow $transition-fast, filter $transition-fast;
+  color: #fff;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-heavy;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
 
   &:hover {
-    transform: translateY(-2px);
-    filter: brightness(1.04);
-    box-shadow: 0 12px 26px rgba($color-primary, 0.34);
+    background: $color-red-deep;
+    box-shadow: $shadow-hover;
+    transform: translate(-2px, -2px);
   }
 }
 
 .filter-panel {
   position: relative;
   z-index: 10;
-  margin-bottom: 16px;
+  margin-bottom: $space-lg;
   padding: 18px;
-  border: 1px solid $color-border-light;
+  border: $border-ink;
   border-radius: $radius-lg;
-  background: #fff;
-  box-shadow: $shadow-card;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -13px;
+    left: 34px;
+    width: 118px;
+    height: 24px;
+    border: 1.5px solid rgba($color-ink, 0.42);
+    background: rgba($color-yellow, 0.78);
+    clip-path: polygon(2% 0, 98% 8%, 100% 92%, 0 100%);
+    transform: rotate(-2deg);
+  }
 }
 
 .toolbar-search {
@@ -506,47 +533,54 @@ async function fetchProducts() {
   flex: 1;
 
   :deep(.el-input__wrapper) {
-    min-height: 44px;
-    border-radius: 999px;
-    box-shadow: 0 0 0 1px $color-border inset;
+    min-height: 46px;
+    border-radius: $radius-full;
     padding: 3px 16px;
-  }
-
-  :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.24) inset;
   }
 }
 
 .search-button {
-  width: 92px;
-  border: 0;
+  width: 96px;
+  border: $border-ink;
   border-radius: $radius-full;
-  background: linear-gradient(135deg, $color-primary, $color-primary-dark);
+  background: $color-red;
+  box-shadow: $shadow-button;
   color: #fff;
-  font-weight: 800;
-  cursor: pointer;
-  transition: filter $transition-fast, transform $transition-fast;
+  font-weight: $font-weight-heavy;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
 
   &:hover {
-    filter: brightness(1.05);
+    background: $color-red-deep;
+    box-shadow: $shadow-hover;
+    transform: translate(-2px, -2px);
   }
 
   &:active {
-    transform: scale(0.97);
+    box-shadow: 1px 1px 0 $color-ink;
+    transform: translate(2px, 2px);
   }
 }
 
 .search-history {
   position: absolute;
-  top: 52px;
+  top: 54px;
   left: 0;
-  right: 98px;
+  right: 106px;
   z-index: 100;
   padding: 12px 14px;
-  background: #fff;
-  border: 1px solid $color-border-light;
+  border: $border-ink;
   border-radius: $radius-md;
-  box-shadow: 0 14px 34px rgba(45, 36, 32, 0.12);
+  background: $color-bg-card;
+  box-shadow: $shadow-hover;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent 42%);
+  }
 }
 
 .hist-header {
@@ -554,8 +588,9 @@ async function fetchProducts() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
-  color: $color-text-muted;
-  font-size: 13px;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-bold;
 }
 
 .hist-clear,
@@ -566,7 +601,7 @@ async function fetchProducts() {
   cursor: pointer;
 
   &:hover {
-    color: $color-primary;
+    color: $color-red;
   }
 }
 
@@ -582,11 +617,20 @@ async function fetchProducts() {
   gap: 4px;
   max-width: 160px;
   padding: 5px 10px;
-  border-radius: 999px;
-  background: $color-bg-warm;
+  border: 1.5px dashed rgba($color-ink, 0.5);
+  border-radius: $radius-full;
+  background: $color-paper;
   color: $color-text-secondary;
-  font-size: 13px;
+  font-size: $font-size-sm;
   cursor: pointer;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
+
+  &:hover {
+    border-style: solid;
+    background: $color-yellow;
+    box-shadow: 2px 2px 0 $color-ink;
+    transform: translate(-1px, -1px);
+  }
 }
 
 .hist-text {
@@ -597,7 +641,7 @@ async function fetchProducts() {
 
 .hist-fade-enter-active,
 .hist-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity $transition-fast, transform $transition-fast;
 }
 
 .hist-fade-enter-from,
@@ -616,8 +660,8 @@ async function fetchProducts() {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding-top: 10px;
-  border-top: 1px solid $color-border-light;
+  padding-top: 12px;
+  border-top: 2px dashed rgba($color-ink, 0.22);
 }
 
 .filter-block--price {
@@ -628,9 +672,9 @@ async function fetchProducts() {
   width: 36px;
   flex-shrink: 0;
   padding-top: 6px;
-  color: $color-text-muted;
-  font-size: 13px;
-  font-weight: 700;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-heavy;
 }
 
 .filter-chips {
@@ -639,7 +683,7 @@ async function fetchProducts() {
   flex: 1;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 3px;
+  padding: 0 2px 5px;
   -webkit-overflow-scrolling: touch;
 
   &::-webkit-scrollbar {
@@ -650,27 +694,39 @@ async function fetchProducts() {
 .chip {
   flex-shrink: 0;
   padding: 7px 14px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: $color-bg-warm;
+  border: 2px solid transparent;
+  border-radius: $radius-full;
+  background: $color-paper;
   color: $color-text-secondary;
-  font-size: 13px;
-  cursor: pointer;
-  transition: color $transition-fast, background $transition-fast, border-color $transition-fast;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-bold;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast, color $transition-fast;
 
   &:hover {
-    color: $color-primary;
-    border-color: rgba(224, 122, 95, 0.2);
+    border-color: $color-ink;
+    background: $color-bg-card;
+    color: $color-text;
+    box-shadow: 2px 2px 0 $color-ink;
   }
 
   &--active {
-    color: #fff;
-    background: linear-gradient(135deg, $color-primary, $color-primary-dark);
-    font-weight: 800;
-    box-shadow: 0 4px 12px rgba($color-primary, 0.28);
+    position: relative;
+    border-color: $color-ink;
+    background: $color-yellow;
+    box-shadow: 2px 2px 0 $color-ink;
+    color: $color-text;
+    font-weight: $font-weight-heavy;
 
-    &:hover {
-      color: #fff;
+    &::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: -6px;
+      width: 18px;
+      height: 3px;
+      border-radius: $radius-full;
+      background: $color-red;
+      transform: translateX(-50%);
     }
   }
 
@@ -683,22 +739,25 @@ async function fetchProducts() {
 .price-range {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   flex-wrap: wrap;
 }
 
 .price-input {
-  width: 76px;
-  height: 32px;
+  width: 78px;
+  height: 34px;
   padding: 0 10px;
-  border: 1px solid $color-border;
-  border-radius: 8px;
-  color: $color-text;
-  font-size: 13px;
+  border: 2px solid $color-ink;
+  border-radius: $radius-sm;
   outline: none;
+  background: $color-paper;
+  color: $color-text;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
 
   &:focus {
-    border-color: $color-primary;
+    background: $color-bg-card;
+    box-shadow: 2px 2px 0 $color-ink;
   }
 
   &::placeholder {
@@ -715,34 +774,39 @@ async function fetchProducts() {
 }
 
 .price-sep {
-  color: $color-text-muted;
+  color: $color-text-secondary;
+  font-weight: $font-weight-heavy;
 }
 
 .price-apply,
 .price-reset {
-  height: 32px;
+  height: 34px;
   padding: 0 12px;
-  border-radius: 8px;
+  border: 2px solid $color-ink;
+  border-radius: $radius-full;
   font-size: 12px;
-  cursor: pointer;
+  font-weight: $font-weight-heavy;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast, color $transition-fast;
+
+  &:hover {
+    box-shadow: 2px 2px 0 $color-ink;
+    transform: translate(-1px, -1px);
+  }
 }
 
 .price-apply {
-  border: 0;
-  background: $color-primary-lighter;
-  color: $color-primary;
-  font-weight: 800;
+  background: $color-yellow;
+  color: $color-text;
 
   &:hover {
-    background: $color-primary;
+    background: $color-red;
     color: #fff;
   }
 }
 
 .price-reset {
-  border: 1px solid $color-border;
-  background: #fff;
-  color: $color-text-muted;
+  background: $color-bg-card;
+  color: $color-text-secondary;
 }
 
 .result-bar {
@@ -752,64 +816,89 @@ async function fetchProducts() {
   gap: 12px;
   margin-bottom: 12px;
   color: $color-text-secondary;
+  padding: 0 2px;
 
   strong {
     margin-right: 4px;
-    color: $color-text;
-    font-size: 20px;
+    color: $color-red-deep;
+    font-family: $font-family-mono;
+    font-size: 24px;
   }
 }
 
 .sort-btns {
   display: flex;
-  gap: 6px;
+  gap: 7px;
+  flex-wrap: wrap;
 }
 
 .sort-btn {
-  height: 32px;
+  min-width: 54px;
+  height: 34px;
   padding: 0 12px;
-  border: 1px solid $color-border-light;
-  border-radius: 999px;
-  background: #fff;
+  border: 2px solid $color-ink;
+  border-radius: $radius-full;
+  background: $color-bg-card;
   color: $color-text-secondary;
   font-size: 12px;
-  cursor: pointer;
+  font-weight: $font-weight-bold;
+  box-shadow: 2px 2px 0 $color-ink;
 
   &:hover {
-    color: $color-primary;
+    background: $color-yellow;
+    color: $color-text;
   }
 
   &--active {
-    color: #fff;
-    background: $color-text;
-    border-color: $color-text;
-    font-weight: 800;
+    background: $color-ink;
+    color: $color-paper;
+    font-weight: $font-weight-heavy;
   }
 }
 
 .active-filters {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin: -2px 0 16px;
   flex-wrap: wrap;
 }
 
 .active-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 5px 10px;
-  background: $color-primary-lighter;
-  color: $color-primary;
-  border-radius: 999px;
+  border: 2px solid $color-ink;
+  border-radius: $radius-full;
+  background: $color-yellow;
+  box-shadow: 2px 2px 0 $color-ink;
+  color: $color-text;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: $font-weight-heavy;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
+
+  &:hover {
+    background: $color-primary-lighter;
+    transform: translate(-1px, -1px);
+  }
 
   button {
+    display: inline-grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
     border: 0;
+    border-radius: 50%;
     background: none;
-    color: $color-primary;
+    color: $color-text;
     cursor: pointer;
+    font-weight: $font-weight-heavy;
+    line-height: 1;
+
+    &:hover {
+      background: $color-ink;
+      color: $color-paper;
+    }
   }
 }
 
@@ -817,18 +906,21 @@ async function fetchProducts() {
 .skeleton-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .skeleton-card {
   overflow: hidden;
-  border-radius: $radius-md;
-  background: #fff;
+  border: $border-ink;
+  border-radius: $radius-sm;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
 }
 
 .skeleton-img {
   aspect-ratio: 1;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e7e2dc 50%, #f0f0f0 75%);
+  border-bottom: $border-ink;
+  background: linear-gradient(90deg, $color-paper-3 25%, $color-bg-card 50%, $color-paper-3 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
@@ -840,8 +932,8 @@ async function fetchProducts() {
 .skeleton-line {
   height: 14px;
   margin-bottom: 8px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e7e2dc 50%, #f0f0f0 75%);
+  border-radius: $radius-full;
+  background: linear-gradient(90deg, $color-paper-3 25%, $color-bg-card 50%, $color-paper-3 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 
@@ -866,8 +958,27 @@ async function fetchProducts() {
 }
 
 .empty-state {
+  position: relative;
   padding: 72px 20px;
+  border: $border-ink;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
   text-align: center;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    width: 104px;
+    height: 22px;
+    border: 1.5px solid rgba($color-ink, 0.42);
+    background: rgba($color-yellow, 0.76);
+    clip-path: polygon(2% 0, 98% 8%, 100% 92%, 0 100%);
+    transform: translateX(-50%) rotate(-2deg);
+  }
 
   .empty-icon {
     margin-bottom: 12px;
@@ -878,12 +989,12 @@ async function fetchProducts() {
     margin-bottom: 4px;
     color: $color-text;
     font-size: 16px;
-    font-weight: 700;
+    font-weight: $font-weight-heavy;
   }
 
   .empty-hint {
     color: $color-text-muted;
-    font-size: 13px;
+    font-size: $font-size-sm;
   }
 }
 
@@ -904,7 +1015,7 @@ async function fetchProducts() {
   }
 }
 
-@media (max-width: 920px) {
+@media (max-width: $bp-lg) {
   .filter-grid {
     grid-template-columns: 1fr;
   }
@@ -919,14 +1030,18 @@ async function fetchProducts() {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: $bp-sm) {
+  .product-list {
+    padding: $space-lg $space-md $space-2xl;
+  }
+
   .market-hero {
     align-items: flex-start;
     flex-direction: column;
-    padding: 20px;
+    padding: 22px;
 
     h1 {
-      font-size: 26px;
+      font-size: 30px;
     }
   }
 
@@ -936,7 +1051,7 @@ async function fetchProducts() {
 
   .search-button {
     width: 100%;
-    height: 40px;
+    height: 42px;
   }
 
   .search-history {
@@ -946,6 +1061,7 @@ async function fetchProducts() {
   .filter-block {
     flex-direction: column;
     gap: 8px;
+    padding-top: 14px;
   }
 
   .filter-label {
@@ -961,7 +1077,16 @@ async function fetchProducts() {
   .product-grid,
   .skeleton-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 14px;
+  }
+
+  .sort-btns,
+  .active-filters {
+    width: 100%;
+  }
+
+  .sort-btn {
+    flex: 1;
   }
 }
 </style>

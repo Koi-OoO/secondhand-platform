@@ -1,65 +1,77 @@
 <template>
   <div class="home-page">
     <section class="home-hero">
-      <div class="home-hero__glow" aria-hidden="true"></div>
+      <div class="home-hero__inner">
+        <div class="home-hero__content">
+          <span class="home-hero__eyebrow"><i></i>校园与同城 · 闲置流转中</span>
+          <h1>
+            好物不打烊，<br>
+            闲置<span class="home-hero__mark">换个主人</span><span class="home-hero__red">继续发光</span>
+          </h1>
+          <svg class="scribble" viewBox="0 0 240 14" aria-hidden="true">
+            <path d="M3 9 C 30 3, 55 12, 82 7 S 135 3, 162 8 S 215 11, 237 5" />
+          </svg>
+          <p class="home-hero__desc">
+            搜数码、教材、通勤装备和生活小物，发现附近同学正在出售的宝贝。
+            <b>三步上架</b>，让用不上的东西流向<b>正需要的人</b>。
+          </p>
 
-      <div class="home-hero__content">
-        <p class="home-hero__eyebrow">校园与同城闲置交易</p>
-        <h1>把用不上的好物，流转给<span class="home-hero__hl">正需要的人</span></h1>
-        <p class="home-hero__desc">
-          搜数码、教材、通勤装备和生活小物，快速发现附近正在出售的闲置好物。
-        </p>
+          <form class="hero-search" @submit.prevent="handleHeroSearch">
+            <el-icon class="hero-search__icon"><Search /></el-icon>
+            <input
+              v-model="heroKeyword"
+              class="hero-search__input"
+              type="search"
+              placeholder="搜索 iPhone、考研教材、自行车..."
+              aria-label="搜索商品"
+            />
+            <button class="hero-search__button" type="submit">开逛</button>
+          </form>
 
-        <form class="hero-search" @submit.prevent="handleHeroSearch">
-          <el-icon class="hero-search__icon"><Search /></el-icon>
-          <input
-            v-model="heroKeyword"
-            class="hero-search__input"
-            type="search"
-            placeholder="搜索手机、电脑、教材、自行车..."
-            aria-label="搜索商品"
-          />
-          <button class="hero-search__button" type="submit">搜索</button>
-        </form>
+          <div class="hot-keywords">
+            <span class="hot-keywords__label">HOT</span>
+            <button
+              v-for="word in hotKeywords"
+              :key="word"
+              type="button"
+              @click.stop="$router.push(`/products?keyword=${encodeURIComponent(word)}`)"
+            >
+              {{ word }}
+            </button>
+          </div>
+        </div>
 
-        <div class="hot-keywords">
-          <span class="hot-keywords__label">热门</span>
-          <button
-            v-for="word in hotKeywords"
-            :key="word"
-            type="button"
-            @click.stop="$router.push(`/products?keyword=${encodeURIComponent(word)}`)"
-          >
-            {{ word }}
-          </button>
-        </div>
-      </div>
-
-      <div class="home-hero__panel">
-        <div class="publish-card" @click="$router.push('/product/publish')">
-          <span class="publish-card__label">快速发布</span>
-          <strong>闲置换现金</strong>
-          <p class="publish-card__hint">三步上架，轻松出闲置</p>
-          <span class="publish-card__cta">发布商品 →</span>
-        </div>
-        <div class="hero-stat">
-          <span>{{ latestProducts.length || 0 }}</span>
-          <p>今日新上</p>
-        </div>
-        <div class="hero-stat">
-          <span>{{ categories.length || 0 }}</span>
-          <p>交易分类</p>
-        </div>
+        <aside class="home-hero__panel">
+          <div class="stamp">省钱<br>又环保</div>
+          <div class="publish-poster" @click="$router.push('/product/publish')">
+            <span class="tape" aria-hidden="true"></span>
+            <span class="publish-poster__tag">QUICK SELL · 快速出</span>
+            <strong>闲置换现金</strong>
+            <p>拍照、定价、上架，三步搞定</p>
+            <span class="publish-poster__cta">发布商品 <i>→</i></span>
+            <div class="barcode" aria-hidden="true"></div>
+          </div>
+          <div class="ticket-row">
+            <div class="ticket">
+              <b>{{ latestProducts.length || 0 }}</b>
+              <span>今日新上</span>
+            </div>
+            <div class="ticket">
+              <b>{{ categories.length || 0 }}</b>
+              <span>交易分类</span>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
 
     <section class="section category-section">
       <div class="section__header">
         <div>
-          <p class="section__label">Category</p>
-          <h2>按分类逛一逛</h2>
+          <p class="section__label">CATEGORY</p>
+          <h2>按摊位逛一逛</h2>
         </div>
-        <router-link to="/products" class="see-all">查看全部</router-link>
+        <router-link to="/products" class="see-all">查看全部 <i>→</i></router-link>
       </div>
 
       <div class="category-grid">
@@ -74,67 +86,69 @@
           <span class="category-name">{{ cat.name }}</span>
         </button>
         <button type="button" class="category-item category-item--all" @click="$router.push('/products')">
-          <span class="category-icon">+</span>
+          <span class="category-icon">✦</span>
           <span class="category-name">全部商品</span>
         </button>
       </div>
     </section>
 
-    <section class="section channels-section">
-      <div class="channel-card channel-card--primary" @click="$router.push('/products?sort=latest')">
-        <span>最新发布</span>
+    <section class="channels-section">
+      <button class="channel-card channel-card--ink" type="button" @click="$router.push('/products?sort=latest')">
+        <span>FRESH · 上新</span>
         <strong>刚刚上架的好物</strong>
-        <p>抢先发现低价闲置</p>
-        <span class="channel-card__arrow" aria-hidden="true">→</span>
-      </div>
-      <div class="channel-card" @click="$router.push('/products?sort=hottest')">
-        <span>大家想要</span>
-        <strong>高人气商品</strong>
-        <p>看看别人都在关注什么</p>
-        <span class="channel-card__arrow" aria-hidden="true">→</span>
-      </div>
-      <div class="channel-card" @click="$router.push('/products?sort=price_asc')">
-        <span>低价淘</span>
-        <strong>预算友好</strong>
-        <p>从便宜实用开始逛</p>
-        <span class="channel-card__arrow" aria-hidden="true">→</span>
-      </div>
+        <p>手快有，手慢无，抢先发现低价闲置</p>
+        <i aria-hidden="true">→</i>
+      </button>
+      <button class="channel-card channel-card--yellow" type="button" @click="$router.push('/products?sort=hottest')">
+        <span>POPULAR · 人气</span>
+        <strong>大家都想要</strong>
+        <p>看看同学们都在蹲什么</p>
+        <i aria-hidden="true">→</i>
+      </button>
+      <button class="channel-card" type="button" @click="$router.push('/products?sort=price_asc')">
+        <span>BUDGET · 捡漏</span>
+        <strong>预算友好区</strong>
+        <p>从便宜实用开始逛起</p>
+        <i aria-hidden="true">→</i>
+      </button>
     </section>
 
-    <section class="section">
+    <section class="section arrivals-section">
       <div class="section__header">
         <div>
-          <p class="section__label">New arrivals</p>
-          <h2>最新发布</h2>
+          <p class="section__label">NEW ARRIVALS</p>
+          <h2>刚刚出摊</h2>
         </div>
-        <router-link to="/products?sort=latest" class="see-all">更多</router-link>
+        <router-link to="/products?sort=latest" class="see-all">更多上新 <i>→</i></router-link>
       </div>
+
       <div class="scroll-row">
         <article
           v-for="item in latestProducts"
           :key="item.id"
-          class="scroll-card"
+          class="polaroid"
           @click="$router.push(`/product/${item.id}`)"
         >
-          <div class="scroll-card__img">
+          <div class="polaroid__img">
             <img v-if="getFirstImage(item)" :src="getFirstImage(item)" :alt="item.title" loading="lazy" />
             <div v-else class="image-fallback">暂无图片</div>
           </div>
-          <span class="scroll-card__price">¥{{ formatPriceNum(item.price) }}</span>
-          <span class="scroll-card__title">{{ item.title }}</span>
+          <p class="polaroid__title">{{ item.title }}</p>
+          <span class="price-ticket"><i>¥</i><b>{{ formatPriceNum(item.price) }}</b></span>
         </article>
         <div v-if="!latestProducts.length" class="empty-inline">暂无商品</div>
       </div>
     </section>
 
-    <section class="section">
+    <section class="section recommend-section">
       <div class="section__header">
         <div>
-          <p class="section__label">For you</p>
-          <h2>猜你喜欢</h2>
+          <p class="section__label">FOR YOU</p>
+          <h2>猜你想蹲</h2>
         </div>
-        <router-link to="/products?sort=hottest" class="see-all">进入商品广场</router-link>
+        <router-link to="/products?sort=hottest" class="see-all">进入商品广场 <i>→</i></router-link>
       </div>
+
       <div class="waterfall">
         <ProductCard
           v-for="item in recommendProducts"
@@ -222,131 +236,163 @@ const categoryIcons = {
   padding-bottom: $space-2xl;
 }
 
-// === 入场动画：自上而下错落浮现 ===
 @keyframes riseIn {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .home-page > section {
-  animation: riseIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: riseIn 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
 .home-page > section:nth-child(1) { animation-delay: 0.04s; }
 .home-page > section:nth-child(2) { animation-delay: 0.12s; }
 .home-page > section:nth-child(3) { animation-delay: 0.20s; }
 .home-page > section:nth-child(4) { animation-delay: 0.28s; }
 .home-page > section:nth-child(5) { animation-delay: 0.36s; }
 
-// === Hero ===
 .home-hero {
   position: relative;
+  padding: 52px $space-lg 20px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: max(18px, calc((100vw - #{$max-width}) / 2));
+    right: max(18px, calc((100vw - #{$max-width}) / 2));
+    bottom: 0;
+    height: 2px;
+    border-top: 2px dashed rgba($color-ink, 0.18);
+    pointer-events: none;
+  }
+}
+
+.home-hero__inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 312px;
-  gap: 28px;
-  margin: 8px 0 36px;
-  padding: 44px 40px;
-  overflow: hidden;
-  border-radius: $radius-xl;
-  border: 1px solid rgba($color-primary, 0.14);
-  background:
-    radial-gradient(130% 120% at 0% 0%, rgba($color-primary-light, 0.20), transparent 52%),
-    radial-gradient(120% 130% at 100% 8%, rgba($color-primary-lighter, 0.9), transparent 46%),
-    linear-gradient(180deg, $color-bg-warm 0%, #ffffff 100%);
-  box-shadow: 0 18px 48px rgba(224, 122, 95, 0.10);
+  grid-template-columns: minmax(0, 1fr) 350px;
+  gap: 56px;
+  align-items: start;
+  max-width: $max-width;
+  margin: 0 auto;
 }
 
-.home-hero__glow {
-  position: absolute;
-  top: -120px;
-  right: -80px;
-  width: 360px;
-  height: 360px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba($color-primary-light, 0.30), transparent 70%);
-  filter: blur(20px);
-  pointer-events: none;
-}
-
-.home-hero__content {
-  position: relative;
-  z-index: 1;
-}
-
-.home-hero__eyebrow,
-.section__label {
+.home-hero__eyebrow {
   display: inline-flex;
   align-items: center;
-  margin-bottom: 12px;
-  color: $color-primary-dark;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-}
+  gap: 9px;
+  margin-bottom: 26px;
+  padding: 6px 15px;
+  border: $border-ink;
+  border-radius: $radius-full;
+  background: $color-bg-card;
+  box-shadow: 3px 3px 0 $color-ink;
+  font-family: $font-family-mono;
+  font-size: 11px;
+  font-weight: $font-weight-heavy;
+  letter-spacing: 1.4px;
 
-.home-hero__eyebrow::before {
-  content: '';
-  width: 22px;
-  height: 2px;
-  margin-right: 9px;
-  border-radius: 2px;
-  background: $color-primary;
+  i {
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid $color-ink;
+    border-radius: 50%;
+    background: $color-green;
+  }
 }
 
 .home-hero h1 {
-  max-width: 660px;
-  margin: 0 0 14px;
+  max-width: 720px;
+  margin: 0;
   color: $color-text;
-  font-size: 40px;
-  font-weight: 800;
-  line-height: 1.18;
-  letter-spacing: -0.5px;
+  font-family: $font-family-display;
+  font-size: clamp(38px, 4.8vw, 58px);
+  font-weight: $font-weight-heavy;
+  line-height: 1.22;
+  letter-spacing: 0;
 }
 
-.home-hero__hl {
-  background: linear-gradient(transparent 60%, rgba($color-primary-light, 0.55) 0);
-  padding: 0 2px;
-  color: $color-primary-dark;
+.home-hero__mark {
+  display: inline-block;
+  margin: 0 5px;
+  padding: 0 7px;
+  border-radius: $radius-xs;
+  background: linear-gradient(104deg, transparent 1%, $color-yellow 4%, $color-yellow 96%, transparent 99%);
+}
+
+.home-hero__red {
+  color: $color-red;
+}
+
+.scribble {
+  display: block;
+  width: 240px;
+  max-width: 70vw;
+  margin-top: 6px;
+  stroke: $color-red;
+  stroke-width: 3.5;
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 320;
+  stroke-dashoffset: 320;
+  animation: drawLine 1s ease 0.45s forwards;
+}
+
+@keyframes drawLine {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .home-hero__desc {
-  max-width: 580px;
+  max-width: 560px;
+  margin-top: 20px;
   color: $color-text-secondary;
   font-size: 16px;
-  line-height: 1.7;
+  line-height: $line-height-relaxed;
+
+  b {
+    color: $color-text;
+    background: linear-gradient(transparent 62%, rgba($color-yellow, 0.55) 62%);
+    padding: 0 2px;
+  }
 }
 
 .hero-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: 600px;
-  height: 56px;
-  margin-top: 26px;
-  padding: 0 8px 0 20px;
-  background: #fff;
-  border: 1.5px solid rgba($color-primary, 0.35);
+  gap: 12px;
+  max-width: 560px;
+  min-height: 60px;
+  margin-top: 30px;
+  padding: 0 8px 0 22px;
+  border: $border-ink;
   border-radius: $radius-full;
-  box-shadow: 0 12px 30px rgba(224, 122, 95, 0.14);
-  transition: border-color $transition-fast, box-shadow $transition-fast, transform $transition-fast;
+  background: $color-bg-card;
+  box-shadow: 5px 5px 0 $color-ink;
+  transition: transform $transition-fast, box-shadow $transition-fast;
+
+  &:hover {
+    box-shadow: 6px 6px 0 $color-ink;
+    transform: translate(-1px, -1px);
+  }
 
   &:focus-within {
-    border-color: $color-primary;
-    box-shadow: 0 16px 38px rgba(224, 122, 95, 0.22);
-    transform: translateY(-1px);
+    box-shadow: $shadow-hover;
+    transform: translate(-2px, -2px);
   }
 }
 
 .hero-search__icon {
-  color: $color-primary;
-  font-size: 22px;
+  flex-shrink: 0;
+  color: $color-red;
+  font-size: 21px;
 }
 
 .hero-search__input {
   flex: 1;
   min-width: 0;
   border: 0;
-  outline: none;
+  outline: 0;
   background: transparent;
   color: $color-text;
   font-size: 15px;
@@ -354,472 +400,688 @@ const categoryIcons = {
   &::placeholder {
     color: $color-text-muted;
   }
-
-  &::-webkit-search-cancel-button {
-    cursor: pointer;
-  }
 }
 
 .hero-search__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;
-  padding: 0 26px;
-  border: 0;
-  color: #fff;
-  background: linear-gradient(135deg, $color-primary, $color-primary-dark);
+  height: 44px;
+  padding: 0 25px;
+  border: $border-ink;
   border-radius: $radius-full;
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  transition: transform $transition-fast, box-shadow $transition-fast, filter $transition-fast;
-  box-shadow: $shadow-button;
+  background: $color-red;
+  color: #fff;
+  font-weight: $font-weight-heavy;
+  transition: background $transition-fast, box-shadow $transition-fast;
 
   &:hover {
-    filter: brightness(1.04);
-    box-shadow: 0 6px 18px rgba(224, 122, 95, 0.42);
-  }
-
-  &:active {
-    transform: scale(0.97);
+    background: $color-red-deep;
+    box-shadow: 2px 2px 0 $color-ink;
   }
 }
 
 .hot-keywords {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
-  font-size: 13px;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+}
 
-  &__label {
-    color: $color-text-muted;
-    font-weight: 600;
-  }
+.hot-keywords__label {
+  color: $color-text-secondary;
+  font-family: $font-family-mono;
+  font-size: 12px;
+  font-weight: $font-weight-heavy;
+}
 
-  button {
-    border: 1px solid $color-border;
-    background: rgba(255, 255, 255, 0.7);
-    color: $color-text-secondary;
-    border-radius: $radius-full;
-    padding: 6px 13px;
-    cursor: pointer;
-    transition: color $transition-fast, border-color $transition-fast, background $transition-fast, transform $transition-fast;
+.hot-keywords button {
+  padding: 5px 13px;
+  border: 1.5px dashed rgba($color-ink, 0.48);
+  border-radius: $radius-full;
+  background: transparent;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
 
-    &:hover {
-      color: $color-primary-dark;
-      border-color: rgba($color-primary, 0.4);
-      background: $color-primary-lighter;
-      transform: translateY(-1px);
-    }
+  &:hover {
+    border-style: solid;
+    background: $color-bg-card;
+    color: $color-text;
+    box-shadow: 2px 2px 0 $color-ink;
+    transform: translateY(-1px);
   }
 }
 
-// === Hero 右侧面板 ===
 .home-hero__panel {
   position: relative;
-  z-index: 1;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  align-content: start;
+  gap: $space-md;
+  padding-top: 10px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 22px -14px auto auto;
+    width: 72px;
+    height: 18px;
+    border: 1.5px solid rgba($color-ink, 0.35);
+    background: rgba($color-paper-2, 0.46);
+    transform: rotate(8deg);
+  }
 }
 
-.publish-card {
-  grid-column: 1 / -1;
+.stamp {
+  position: absolute;
+  top: -34px;
+  right: -18px;
+  z-index: 3;
+  display: grid;
+  width: 92px;
+  height: 92px;
+  place-items: center;
+  border: 2.5px solid $color-red;
+  border-radius: 50%;
+  background: $color-bg-card;
+  box-shadow: 3px 3px 0 $color-ink;
+  color: $color-red;
+  font-family: $font-family-display;
+  font-size: 15px;
+  font-weight: $font-weight-heavy;
+  line-height: 1.3;
+  text-align: center;
+  transform: rotate(12deg);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border: 1.5px dashed $color-red;
+    border-radius: 50%;
+  }
+}
+
+.publish-poster {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 22px;
-  overflow: hidden;
+  padding: 26px 24px 20px;
+  border: $border-ink;
   border-radius: $radius-lg;
-  background: linear-gradient(140deg, $color-primary 0%, $color-primary-light 100%);
+  background: $color-red;
+  box-shadow: 6px 6px 0 $color-ink;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 12px 28px rgba(224, 122, 95, 0.28);
+  transform: rotate(-1.2deg);
   transition: transform $transition-fast, box-shadow $transition-fast;
+
+  &:hover {
+    box-shadow: $shadow-hover;
+    transform: rotate(-1.2deg) translate(-2px, -2px);
+  }
+}
+
+.tape {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 96px;
+  height: 24px;
+  border: 1.5px solid rgba($color-ink, 0.55);
+  background: rgba($color-yellow, 0.86);
+  clip-path: polygon(3% 0, 97% 6%, 100% 94%, 0 100%);
+  transform: translateX(-50%) rotate(-3deg);
+}
+
+.publish-poster__tag {
+  font-family: $font-family-mono;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+}
+
+.publish-poster strong {
+  display: block;
+  margin: 8px 0 4px;
+  font-family: $font-family-display;
+  font-size: 30px;
+  font-weight: $font-weight-heavy;
+}
+
+.publish-poster p {
+  font-size: $font-size-sm;
+  opacity: 0.92;
+}
+
+.publish-poster__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 8px 18px;
+  border: 2px solid $color-ink;
+  border-radius: $radius-full;
+  background: $color-bg-card;
+  box-shadow: 3px 3px 0 rgba($color-ink, 0.85);
+  color: $color-red-deep;
+  font-size: 13px;
+  font-weight: $font-weight-heavy;
+
+  i {
+    font-style: normal;
+    transition: transform $transition-fast;
+  }
+}
+
+.publish-poster:hover .publish-poster__cta i {
+  transform: translateX(4px);
+}
+
+.barcode {
+  height: 26px;
+  margin-top: 18px;
+  opacity: 0.85;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #fff 0 2px,
+      transparent 2px 5px,
+      #fff 5px 6px,
+      transparent 6px 12px,
+      #fff 12px 15px,
+      transparent 15px 18px,
+      #fff 18px 19px,
+      transparent 19px 26px
+    );
+}
+
+.ticket-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $space-md;
+}
+
+.ticket {
+  position: relative;
+  padding: 16px 18px 14px 26px;
+  border: $border-ink;
+  border-radius: $radius-md;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: 12px;
+    border-left: 2px dashed rgba($color-ink, 0.3);
+  }
 
   &::after {
     content: '';
     position: absolute;
-    right: -30px;
-    bottom: -40px;
-    width: 130px;
-    height: 130px;
+    right: -10px;
+    bottom: -10px;
+    width: 42px;
+    height: 42px;
+    border: 2px solid rgba($color-ink, 0.12);
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.14);
   }
 
-  &:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 38px rgba(224, 122, 95, 0.36);
-  }
-
-  strong {
-    font-size: 23px;
-    font-weight: 800;
-  }
-}
-
-.publish-card__label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  opacity: 0.9;
-}
-
-.publish-card__hint {
-  font-size: 13px;
-  opacity: 0.92;
-}
-
-.publish-card__cta {
-  width: fit-content;
-  margin-top: 10px;
-  padding: 7px 16px;
-  background: rgba(255, 255, 255, 0.95);
-  color: $color-primary-dark;
-  border-radius: $radius-full;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.hero-stat {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 16px 18px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid $color-border-light;
-  border-radius: $radius-lg;
-  backdrop-filter: blur(6px);
-
-  span {
-    color: $color-primary-dark;
-    font-size: 30px;
-    font-weight: 850;
+  b {
+    display: block;
+    color: $color-red-deep;
+    font-family: $font-family-mono;
+    font-size: 27px;
     line-height: 1.1;
   }
 
-  p {
-    margin-top: 2px;
+  span {
     color: $color-text-secondary;
-    font-size: 13px;
+    font-size: 12px;
+    font-weight: $font-weight-semibold;
   }
 }
 
-// === 通用区块 ===
-.section {
-  margin-bottom: 38px;
+.section,
+.channels-section {
+  width: 100%;
+  max-width: $max-width;
+  margin: 0 auto;
+  padding: 44px $space-lg 0;
 }
 
 .section__header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: $space-lg;
+  margin-bottom: $space-lg;
 
   h2 {
     color: $color-text;
-    font-size: 25px;
-    font-weight: 800;
-    line-height: 1.2;
-    letter-spacing: -0.4px;
+    font-family: $font-family-display;
+    font-size: 32px;
+    font-weight: $font-weight-heavy;
+    line-height: 1.15;
   }
 }
 
-.section__label::before {
-  content: '';
-  width: 18px;
-  height: 2px;
-  margin-right: 8px;
-  border-radius: 2px;
-  background: $color-primary;
+.section__label {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 10px;
+  border: 1.5px solid $color-red-deep;
+  border-radius: $radius-xs;
+  color: $color-red-deep;
+  font-family: $font-family-mono;
+  font-size: 11px;
+  font-weight: $font-weight-heavy;
+  letter-spacing: 2px;
+  transform: rotate(-1.5deg);
 }
 
 .see-all {
+  display: inline-flex;
   flex-shrink: 0;
-  color: $color-text-secondary;
-  font-size: 13px;
-  font-weight: 600;
-  transition: color $transition-fast;
-
-  &:hover {
-    color: $color-primary;
-  }
-}
-
-// === 分类网格 ===
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.category-item {
-  display: flex;
-  min-height: 104px;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 1px solid $color-border-light;
-  border-radius: $radius-md;
-  background: #fff;
-  cursor: pointer;
-  transition: transform $transition-fast, box-shadow $transition-fast, border-color $transition-fast;
+  gap: 6px;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-bold;
+
+  i {
+    font-style: normal;
+    transition: transform $transition-fast;
+  }
 
   &:hover {
-    border-color: rgba($color-primary, 0.3);
-    box-shadow: 0 10px 24px rgba(45, 36, 32, 0.09);
-    transform: translateY(-3px);
+    color: $color-text;
 
-    .category-icon {
-      background: $color-primary-lighter;
-      transform: scale(1.08);
+    i {
+      transform: translateX(4px);
     }
   }
 }
 
-.category-item--all {
-  color: $color-primary-dark;
-  border-color: rgba($color-primary, 0.25);
-  background: linear-gradient(160deg, $color-primary-lighter, #fff);
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 14px;
+}
 
-  .category-icon {
-    background: rgba(255, 255, 255, 0.7);
-    color: $color-primary;
-    font-weight: 700;
+.category-item {
+  position: relative;
+  display: flex;
+  min-height: 110px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: $border-ink;
+  border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
+  overflow: hidden;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: auto -18px -28px auto;
+    width: 64px;
+    height: 64px;
+    border: 2px dashed rgba($color-ink, 0.12);
+    border-radius: 50%;
+    transition: transform $transition-fast;
+  }
+
+  &:hover {
+    background: $color-paper-2;
+    box-shadow: 6px 6px 0 $color-ink;
+    transform: translate(-2px, -2px) rotate(-1deg);
+  }
+
+  &:hover::after {
+    transform: translate(-6px, -6px);
+  }
+
+  &:nth-child(even):hover {
+    transform: translate(-2px, -2px) rotate(1deg);
   }
 }
 
-.category-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 50px;
-  height: 50px;
-  border-radius: $radius-full;
-  background: $color-bg-warm;
-  font-size: 26px;
-  transition: transform $transition-fast, background $transition-fast;
+.category-item--all {
+  background: $color-yellow;
 }
+
+.category-icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 2px solid $color-ink;
+  border-radius: 50%;
+  background: #FFD9C4;
+  font-size: 26px;
+}
+
+.category-item:nth-child(8n+2) .category-icon { background: #CFE6F7; }
+.category-item:nth-child(8n+3) .category-icon { background: #FFEBAE; }
+.category-item:nth-child(8n+4) .category-icon { background: #F5CFDD; }
+.category-item:nth-child(8n+5) .category-icon { background: #CDE8CF; }
+.category-item:nth-child(8n+6) .category-icon { background: #E3D9F5; }
+.category-item:nth-child(8n+7) .category-icon { background: #EBDFC5; }
+.category-item:nth-child(8n+8) .category-icon { background: $color-yellow; }
 
 .category-name {
   max-width: 100%;
   padding: 0 6px;
   color: $color-text;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-bold;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-// === 频道卡 ===
 .channels-section {
   display: grid;
-  grid-template-columns: 1.35fr 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 18px;
 }
 
 .channel-card {
   position: relative;
-  min-height: 128px;
-  padding: 20px 22px;
+  min-height: 142px;
+  padding: 24px 26px;
   overflow: hidden;
-  border: 1px solid $color-border-light;
+  border: $border-ink;
   border-radius: $radius-lg;
-  background: #fff;
-  cursor: pointer;
-  box-shadow: $shadow-sm;
-  transition: transform $transition-fast, box-shadow $transition-fast, border-color $transition-fast;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
+  color: $color-text;
+  text-align: left;
+  transition: transform $transition-fast, box-shadow $transition-fast;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 18px;
+    right: 66px;
+    bottom: 18px;
+    border-top: 2px dashed rgba($color-ink, 0.16);
+  }
+
+  &:hover {
+    box-shadow: $shadow-hover;
+    transform: translate(-3px, -3px);
+  }
 
   span {
-    color: $color-primary;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
+    color: $color-red-deep;
+    font-family: $font-family-mono;
+    font-size: 11px;
+    font-weight: $font-weight-heavy;
+    letter-spacing: 1.5px;
   }
 
   strong {
     display: block;
-    margin: 8px 0 5px;
-    color: $color-text;
-    font-size: 21px;
-    font-weight: 800;
+    margin: 9px 0 5px;
+    font-family: $font-family-display;
+    font-size: 25px;
+    font-weight: $font-weight-heavy;
   }
 
   p {
     color: $color-text-secondary;
-    font-size: 13px;
+    font-size: $font-size-sm;
   }
 
-  &:hover {
-    border-color: rgba($color-primary, 0.25);
-    box-shadow: $shadow-lg;
-    transform: translateY(-3px);
+  i {
+    position: absolute;
+    right: 20px;
+    bottom: 16px;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 2px solid $color-ink;
+    border-radius: 50%;
+    background: $color-paper;
+    font-style: normal;
+    font-weight: $font-weight-heavy;
+    transition: transform $transition-fast, background $transition-fast;
+  }
 
-    .channel-card__arrow {
-      transform: translateX(4px);
-      opacity: 1;
-    }
+  &:hover i {
+    background: $color-yellow;
+    transform: translateX(4px);
   }
 }
 
-.channel-card__arrow {
-  position: absolute;
-  right: 18px;
-  bottom: 16px;
-  color: $color-primary !important;
-  font-size: 18px;
-  font-weight: 800;
-  opacity: 0.55;
-  transition: transform $transition-fast, opacity $transition-fast;
-}
+.channel-card--ink {
+  background: $color-ink;
 
-.channel-card--primary {
-  border-color: transparent;
-  background: linear-gradient(140deg, $color-primary 0%, $color-primary-light 100%);
-  box-shadow: 0 12px 28px rgba(224, 122, 95, 0.26);
+  &::before {
+    border-top-color: rgba($color-paper, 0.2);
+  }
 
   &::after {
     content: '';
     position: absolute;
-    right: -34px;
-    top: -34px;
-    width: 120px;
-    height: 120px;
+    top: -20px;
+    right: -20px;
+    width: 130px;
+    height: 130px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.14);
+    background-image: radial-gradient(rgba($color-paper, 0.5) 1.5px, transparent 1.6px);
+    background-size: 10px 10px;
   }
 
-  span,
-  strong,
+  span {
+    color: $color-yellow;
+  }
+
+  strong {
+    color: $color-paper;
+  }
+
   p {
+    color: rgba($color-paper, 0.75);
+  }
+
+  i {
+    border-color: $color-paper;
+    background: $color-red;
     color: #fff;
   }
+}
 
-  .channel-card__arrow {
-    color: #fff !important;
-    opacity: 0.85;
+.channel-card--yellow {
+  background: $color-yellow;
+
+  span,
+  p {
+    color: $color-text;
   }
 }
 
-// === 横向滚动：最新发布 ===
 .scroll-row {
+  position: relative;
   display: flex;
-  gap: 14px;
+  gap: 20px;
   overflow-x: auto;
-  padding: 4px 2px 12px;
+  margin: 0 -4px;
+  padding: 14px 4px 24px;
   scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
+  scrollbar-color: $color-ink $color-paper-3;
+}
 
-  &::-webkit-scrollbar {
-    display: none;
+.polaroid {
+  flex: 0 0 180px;
+  scroll-snap-align: start;
+  padding: 10px 10px 14px;
+  border: $border-ink;
+  border-radius: 6px;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
+  cursor: pointer;
+  transition: transform $transition-fast, box-shadow $transition-fast;
+
+  &:nth-child(odd) {
+    transform: rotate(-1.3deg);
+  }
+
+  &:nth-child(even) {
+    transform: rotate(1.1deg);
+  }
+
+  &:hover {
+    box-shadow: 6px 8px 0 $color-ink;
+    transform: rotate(0) translateY(-6px);
   }
 }
 
-.scroll-card {
-  flex: 0 0 158px;
-  scroll-snap-align: start;
-  cursor: pointer;
-}
-
-.scroll-card__img {
+.polaroid__img {
   position: relative;
-  width: 158px;
-  height: 158px;
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
   overflow: hidden;
-  background: #f2eee9;
-  border-radius: $radius-md;
-  box-shadow: $shadow-sm;
+  border: 1.5px solid rgba($color-ink, 0.2);
+  border-radius: 3px;
+  background: $color-paper-3;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(118deg, rgba(255, 255, 255, 0.5) 0%, transparent 34%);
+    pointer-events: none;
+  }
 
   img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform $transition-normal;
-  }
-
-  .scroll-card:hover & img {
-    transform: scale(1.06);
   }
 }
 
 .image-fallback {
-  display: flex;
+  display: grid;
   width: 100%;
   height: 100%;
-  align-items: center;
-  justify-content: center;
-  color: $color-text-muted;
-  font-size: 13px;
+  place-items: center;
+  background:
+    repeating-linear-gradient(135deg, rgba($color-ink, 0.055) 0 2px, transparent 2px 10px),
+    $color-paper-3;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-heavy;
 }
 
-.scroll-card__price {
-  display: block;
-  margin-top: 10px;
-  color: $color-price;
-  font-size: 18px;
-  font-weight: 850;
-}
-
-.scroll-card__title {
+.polaroid__title {
   display: -webkit-box;
-  margin-top: 2px;
+  min-height: 40px;
+  margin: 12px 0 9px;
   color: $color-text;
   font-size: 13px;
-  line-height: 1.45;
+  font-weight: $font-weight-bold;
+  line-height: 1.5;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-// === 瀑布流：猜你喜欢 ===
+.price-ticket {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 3px 10px 3px 16px;
+  border: 2px solid $color-ink;
+  border-radius: 4px 8px 8px 4px;
+  background: $color-yellow;
+  box-shadow: 2px 2px 0 $color-ink;
+  color: $color-ink;
+  font-family: $font-family-mono;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border: 1.5px solid $color-ink;
+    border-radius: 50%;
+    background: $color-bg-card;
+    transform: translateY(-50%);
+  }
+
+  i {
+    font-style: normal;
+    font-size: 12px;
+  }
+
+  b {
+    max-width: 92px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 19px;
+  }
+}
+
 .waterfall {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
 }
 
 .empty-inline,
 .empty-hint {
-  color: $color-text-muted;
-  font-size: 14px;
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+}
+
+.empty-inline {
+  min-width: 220px;
+  padding: 28px;
+  border: 2px dashed rgba($color-ink, 0.35);
+  border-radius: $radius-md;
+  background: rgba($color-bg-card, 0.68);
+  text-align: center;
 }
 
 .empty-hint {
   padding: 52px 20px;
-  text-align: center;
-  background: $color-bg-warm;
-  border: 1px dashed $color-border;
+  border: $border-ink;
   border-radius: $radius-lg;
+  background: $color-bg-card;
+  box-shadow: $shadow-hard;
+  text-align: center;
 
   a {
     display: inline-flex;
     margin-top: 14px;
     padding: 9px 20px;
-    color: #fff;
-    background: linear-gradient(135deg, $color-primary, $color-primary-dark);
+    border: $border-ink;
     border-radius: $radius-full;
-    font-weight: 700;
+    background: $color-red;
     box-shadow: $shadow-button;
+    color: #fff;
+    font-weight: $font-weight-heavy;
   }
 }
 
-@media (max-width: 960px) {
-  .home-hero {
+@media (max-width: $bp-lg) {
+  .home-hero__inner {
     grid-template-columns: 1fr;
-    padding: 32px 26px;
+    gap: $space-xl;
   }
 
-  .home-hero h1 {
-    font-size: 31px;
+  .home-hero__panel {
+    max-width: 520px;
   }
 
   .category-grid {
@@ -832,36 +1094,61 @@ const categoryIcons = {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: $bp-sm) {
   .home-hero {
-    margin-top: 4px;
-    padding: 24px 20px;
+    padding: $space-xl $space-md 8px;
   }
 
   .home-hero h1 {
-    font-size: 27px;
+    font-size: 34px;
   }
 
   .hero-search {
-    height: auto;
-    min-height: 52px;
+    min-height: 54px;
+    padding-left: 16px;
+    gap: 8px;
   }
 
   .hero-search__button {
-    padding: 0 18px;
+    height: 40px;
+    padding: 0 16px;
   }
 
-  .home-hero__panel,
+  .stamp {
+    right: 4px;
+  }
+
   .category-grid,
   .channels-section,
-  .waterfall {
+  .waterfall,
+  .ticket-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .home-page > section {
-    animation: none;
+  .section,
+  .channels-section {
+    padding-right: $space-md;
+    padding-left: $space-md;
+  }
+
+  .section__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .section__header h2 {
+    font-size: 28px;
+  }
+
+  .category-item {
+    min-height: 98px;
+  }
+
+  .channel-card {
+    min-height: 132px;
+    padding: 20px;
   }
 }
 </style>

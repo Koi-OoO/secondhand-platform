@@ -1,9 +1,22 @@
 <template>
   <header class="app-header" :class="{ 'app-header--scrolled': scrolled }">
+    <div class="market-ticker" aria-hidden="true">
+      <div class="market-ticker__track">
+        <div v-for="copy in 2" :key="copy" class="market-ticker__group">
+          <span v-for="item in tickerItems" :key="`${copy}-${item}`" class="market-ticker__item">
+            {{ item }}
+          </span>
+        </div>
+      </div>
+    </div>
+
     <div class="app-header__inner container">
       <router-link to="/" class="app-header__logo" aria-label="校园闲物首页">
-        <span class="logo-icon">校</span>
-        <span class="logo-text">校园闲物</span>
+        <span class="logo-icon">闲</span>
+        <span class="logo-text">
+          <b>校园闲物</b>
+          <small>CAMPUS FLEA MARKET</small>
+        </span>
       </router-link>
 
       <nav class="app-header__nav" aria-label="主导航">
@@ -11,10 +24,27 @@
         <router-link to="/products" class="nav-link" active-class="active">商品广场</router-link>
       </nav>
 
-      <button type="button" class="header-search" @click="router.push('/products')">
-        <el-icon><Search /></el-icon>
-        <span>搜索闲置好物</span>
-      </button>
+      <form class="header-search" role="search" @submit.prevent="handleHeaderSearch">
+        <el-icon class="header-search__icon"><Search /></el-icon>
+        <input
+          v-model="headerKeyword"
+          type="search"
+          placeholder="搜索 iPhone、教材、自行车..."
+          aria-label="搜索商品"
+        />
+        <button
+          v-if="headerKeyword"
+          type="button"
+          class="header-search__clear"
+          aria-label="清空搜索"
+          @click="clearHeaderSearch"
+        >
+          ×
+        </button>
+        <button type="submit" class="header-search__submit" aria-label="提交搜索">
+          <el-icon><Search /></el-icon>
+        </button>
+      </form>
 
       <div class="app-header__actions">
         <template v-if="userStore.isLoggedIn">
@@ -28,7 +58,7 @@
 
           <router-link to="/product/publish" class="btn-publish">
             <el-icon><Plus /></el-icon>
-            <span>发布</span>
+            <span>发布闲置</span>
           </router-link>
 
           <el-dropdown trigger="click" @command="handleCommand">
@@ -73,25 +103,45 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Shop } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getPendingCount } from '@/api/order'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const scrolled = ref(false)
+const headerKeyword = ref('')
 const pendingCount = ref({ toShip: 0, toConfirm: 0 })
 const lastToShip = ref(null)
 const lastToConfirm = ref(null)
 let pendingTimer = null
 
+const tickerItems = [
+  '今日新上 128 件好物',
+  '数码专区最低 3 折起',
+  '面交请选择公共区域',
+  '闲置换现金',
+  '支持担保交易',
+  '让好物继续流转',
+  '本周成交 356 单'
+]
+
 const orderBadge = computed(() => {
   const total = Number(pendingCount.value.toShip || 0) + Number(pendingCount.value.toConfirm || 0)
   return total > 0 ? displayCount(total) : ''
 })
+
+watch(
+  () => route.query.keyword,
+  keyword => {
+    headerKeyword.value = typeof keyword === 'string' ? keyword : ''
+  },
+  { immediate: true }
+)
 
 function onScroll() {
   scrolled.value = window.scrollY > 10
@@ -119,6 +169,23 @@ function handleCommand(cmd) {
 
 function displayCount(count) {
   return count > 99 ? '99+' : String(count)
+}
+
+function handleHeaderSearch() {
+  const keyword = headerKeyword.value.trim()
+  if (!keyword) {
+    router.push('/products')
+    return
+  }
+  router.push({ path: '/products', query: { keyword } })
+}
+
+function clearHeaderSearch() {
+  headerKeyword.value = ''
+  if (route.path === '/products' && route.query.keyword) {
+    const { keyword, page, ...restQuery } = route.query
+    router.replace({ path: '/products', query: restQuery })
+  }
 }
 
 async function pollPendingCount() {
@@ -170,22 +237,21 @@ async function pollPendingCount() {
   position: sticky;
   top: 0;
   z-index: 100;
-  height: 68px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(18px) saturate(1.4);
-  border-bottom: 1px solid rgba(237, 228, 220, 0.75);
+  background: $color-paper;
+  border-bottom: $border-ink;
+  backdrop-filter: blur(10px);
   transition: box-shadow $transition-normal, background $transition-normal;
 
   &--scrolled {
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 8px 24px rgba(45, 36, 32, 0.07);
+    background: rgba($color-paper, 0.96);
+    box-shadow: 0 5px 0 rgba($color-ink, 0.12);
   }
 
   &__inner {
-    height: 100%;
+    min-height: 68px;
     display: flex;
     align-items: center;
-    gap: 22px;
+    gap: 24px;
   }
 
   &__logo {
@@ -210,76 +276,283 @@ async function pollPendingCount() {
   }
 }
 
+.market-ticker {
+  position: relative;
+  overflow: hidden;
+  border-bottom: $border-ink;
+  background: $color-ink;
+  color: $color-paper;
+  font-family: $font-family-mono;
+  font-size: 12.5px;
+  font-weight: $font-weight-heavy;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  box-shadow: inset 0 -1px 0 rgba($color-paper, 0.12);
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    width: 48px;
+    pointer-events: none;
+  }
+
+  &::before {
+    left: 0;
+    background: linear-gradient(90deg, $color-ink, rgba($color-ink, 0));
+  }
+
+  &::after {
+    right: 0;
+    background: linear-gradient(270deg, $color-ink, rgba($color-ink, 0));
+  }
+}
+
+.market-ticker__track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: tickerMove 13.5s linear infinite;
+  transform: translate3d(0, 0, 0);
+}
+
+.market-ticker__group {
+  display: flex;
+  min-width: max(100vw, 980px);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.market-ticker__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 18px 8px;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.18);
+
+  &::after {
+    content: '';
+    width: 7px;
+    height: 7px;
+    margin-left: 28px;
+    border: 1.5px solid $color-ink;
+    border-radius: 50%;
+    background: $color-yellow;
+    color: $color-yellow;
+    box-shadow: 0 0 0 1px rgba($color-paper, 0.34);
+  }
+}
+
+@keyframes tickerMove {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-ticker__track {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}
+
 .logo-icon {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: $color-primary;
+  border: $border-ink;
+  border-radius: $radius-md;
+  background: $color-red;
   color: #fff;
-  font-size: 20px;
-  font-weight: 800;
-  border-radius: 8px;
-  box-shadow: 0 8px 18px rgba($color-primary, 0.25);
+  box-shadow: 3px 3px 0 $color-ink;
+  font-family: $font-family-display;
+  font-size: 24px;
+  font-weight: $font-weight-heavy;
+  transform: rotate(-6deg);
+  transition: transform $transition-fast;
+}
+
+.app-header__logo:hover .logo-icon {
+  transform: rotate(4deg) scale(1.04);
 }
 
 .logo-text {
-  color: $color-text;
-  font-size: 22px;
-  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+
+  b {
+    color: $color-text;
+    font-family: $font-family-display;
+    font-size: 22px;
+    font-weight: $font-weight-heavy;
+  }
+
+  small {
+    color: $color-text-secondary;
+    font-family: $font-family-mono;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+  }
 }
 
 .nav-link {
   position: relative;
-  padding: 8px 12px;
+  padding: 7px 14px;
+  border: 2px solid transparent;
+  border-radius: $radius-full;
   color: $color-text-secondary;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 8px;
-  transition: color $transition-fast, background $transition-fast;
+  font-size: 14px;
+  font-weight: $font-weight-bold;
+  transition: color $transition-fast, background $transition-fast, box-shadow $transition-fast, border-color $transition-fast;
 
   &:hover {
-    color: $color-primary;
-    background: $color-bg-hover;
+    color: $color-text;
+    background: rgba($color-ink, 0.06);
   }
 
   &.active {
     color: $color-text;
-
-    &::after {
-      content: '';
-      position: absolute;
-      left: 14px;
-      right: 14px;
-      bottom: 2px;
-      height: 3px;
-      background: $color-primary;
-      border-radius: 999px;
-    }
+    border-color: $color-ink;
+    background: $color-yellow;
+    box-shadow: 2px 2px 0 $color-ink;
   }
 }
 
 .header-search {
+  position: relative;
   display: flex;
-  min-width: 220px;
-  max-width: 420px;
-  height: 38px;
+  min-width: 300px;
+  max-width: 470px;
+  height: 42px;
   flex: 1;
   align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-  border: 1px solid $color-border;
+  gap: 9px;
+  padding: 0 7px 0 16px;
+  border: $border-ink;
   border-radius: 999px;
-  background: $color-bg-warm;
+  background: $color-bg-card;
   color: $color-text-muted;
-  cursor: pointer;
-  transition: border-color $transition-fast, box-shadow $transition-fast, background $transition-fast;
+  font-weight: $font-weight-semibold;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
+  isolation: isolate;
 
   &:hover {
-    border-color: rgba(224, 122, 95, 0.45);
-    background: #fff;
-    box-shadow: 0 6px 18px rgba(224, 122, 95, 0.12);
+    background: $color-paper-2;
+    box-shadow: $shadow-hard;
+    transform: translate(-1px, -1px);
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 3px 44px 3px 45px;
+    z-index: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, rgba($color-yellow, 0.18), transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity $transition-fast;
+  }
+
+  &:focus-within::after {
+    opacity: 1;
+  }
+
+  &:focus-within {
+    background: $color-paper-2;
+    box-shadow: $shadow-hard;
+    transform: translate(-1px, -1px);
+  }
+
+  &__icon {
+    flex-shrink: 0;
+    color: $color-red;
+    font-size: 17px;
+  }
+
+  input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: $color-text;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-semibold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    appearance: none;
+    line-height: 1.3;
+
+    &::-webkit-search-cancel-button {
+      display: none;
+    }
+
+    &::placeholder {
+      color: $color-text-muted;
+    }
+  }
+}
+
+.header-search__clear {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed rgba($color-ink, 0.42);
+  border-radius: 50%;
+  background: $color-paper;
+  color: $color-text-secondary;
+  font-size: 16px;
+  font-weight: $font-weight-heavy;
+  line-height: 1;
+  transition: background $transition-fast, color $transition-fast, border-color $transition-fast;
+
+  &:hover {
+    border-style: solid;
+    border-color: $color-ink;
+    background: $color-yellow;
+    color: $color-text;
+  }
+}
+
+.header-search__submit {
+  display: inline-flex;
+  width: 31px;
+  height: 31px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid $color-ink;
+  border-radius: 50%;
+  background: $color-red;
+  box-shadow: 2px 2px 0 $color-ink;
+  color: #fff;
+  font-size: 14px;
+  font-weight: $font-weight-heavy;
+  line-height: 1;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
+
+  &:hover {
+    background: $color-red-deep;
+    box-shadow: 3px 3px 0 $color-ink;
+    transform: translate(-1px, -1px);
+  }
+
+  &:active {
+    box-shadow: 1px 1px 0 $color-ink;
+    transform: translate(1px, 1px);
   }
 }
 
@@ -289,17 +562,19 @@ async function pollPendingCount() {
   gap: 5px;
   height: 38px;
   padding: 0 18px;
+  border: $border-ink;
+  border-radius: $radius-full;
   background: $color-primary;
   color: #fff;
   font-size: $font-size-sm;
-  font-weight: 800;
-  border-radius: 999px;
+  font-weight: $font-weight-heavy;
   transition: transform $transition-fast, box-shadow $transition-fast;
-  box-shadow: 0 8px 18px rgba($color-primary, 0.24);
+  box-shadow: $shadow-button;
+  white-space: nowrap;
 
   &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 22px rgba($color-primary, 0.32);
+    transform: translate(-2px, -2px);
+    box-shadow: $shadow-hover;
   }
 }
 
@@ -308,24 +583,25 @@ async function pollPendingCount() {
   height: 34px;
   align-items: center;
   padding: 0 12px;
+  border: 2px solid $color-ink;
   border-radius: 999px;
-  background: rgba($color-error, 0.1);
-  color: $color-error;
+  background: $color-primary-lighter;
+  color: $color-red-deep;
   font-size: 12px;
-  font-weight: 800;
-  box-shadow: 0 0 0 1px rgba($color-error, 0.12) inset;
+  font-weight: $font-weight-heavy;
+  box-shadow: 2px 2px 0 $color-ink;
+  white-space: nowrap;
 
   &:hover {
-    background: rgba($color-error, 0.15);
+    background: $color-yellow;
   }
 
   &--confirm {
-    background: rgba($color-info, 0.1);
-    color: $color-info;
-    box-shadow: 0 0 0 1px rgba($color-info, 0.12) inset;
+    background: #D8F0EA;
+    color: $color-teal;
 
     &:hover {
-      background: rgba($color-info, 0.15);
+      background: $color-yellow;
     }
   }
 }
@@ -339,10 +615,11 @@ async function pollPendingCount() {
   margin-left: 8px;
   padding: 0 5px;
   border-radius: 999px;
-  background: $color-error;
-  color: #fff;
+  border: 1.5px solid $color-ink;
+  background: $color-yellow;
+  color: $color-ink;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: $font-weight-heavy;
   line-height: 1;
 }
 
@@ -351,14 +628,17 @@ async function pollPendingCount() {
   align-items: center;
   gap: $space-sm;
   padding: 3px 10px 3px 3px;
-  border: 0;
+  border: $border-ink;
   border-radius: 999px;
-  background: transparent;
+  background: $color-bg-card;
   cursor: pointer;
-  transition: background $transition-fast;
+  box-shadow: 3px 3px 0 $color-ink;
+  transition: transform $transition-fast, box-shadow $transition-fast, background $transition-fast;
 
   &:hover {
-    background: $color-bg-hover;
+    background: $color-yellow;
+    transform: translate(-1px, -1px);
+    box-shadow: $shadow-hard;
   }
 
   &__avatar {
@@ -387,32 +667,59 @@ async function pollPendingCount() {
   align-items: center;
   justify-content: center;
   padding: 0 16px;
+  border: 2px solid transparent;
   border-radius: 999px;
   font-size: $font-size-sm;
-  font-weight: 700;
+  font-weight: $font-weight-bold;
 }
 
 .btn-text {
   color: $color-text-secondary;
 
   &:hover {
-    color: $color-primary;
+    color: $color-text;
     background: $color-bg-hover;
   }
 }
 
 .btn-primary-sm {
-  background: $color-text;
-  color: #fff;
+  border-color: $color-ink;
+  background: $color-yellow;
+  color: $color-text;
+  box-shadow: 3px 3px 0 $color-ink;
 
   &:hover {
     background: $color-primary;
+    color: #fff;
   }
 }
 
 @media (max-width: 760px) {
-  .app-header {
-    height: auto;
+  .market-ticker {
+    font-size: 11px;
+
+    &::before,
+    &::after {
+      width: 24px;
+    }
+  }
+
+  .market-ticker__track {
+    animation-duration: 13s;
+  }
+
+  .market-ticker__group {
+    min-width: max(100vw, 720px);
+    justify-content: flex-start;
+  }
+
+  .market-ticker__item {
+    padding-right: 12px;
+    padding-left: 12px;
+
+    &::after {
+      margin-left: 18px;
+    }
   }
 
   .app-header__inner {
@@ -424,21 +731,35 @@ async function pollPendingCount() {
 
   .app-header__nav {
     order: 3;
-    width: 100%;
+    width: calc(100% + 6px);
+    margin: 0 -3px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   .header-search {
     order: 4;
     min-width: 100%;
+    height: 44px;
   }
 
   .app-header__actions {
     margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .logo-text,
   .user-trigger__name {
     display: none;
+  }
+
+  .btn-publish {
+    padding: 0 14px;
   }
 }
 </style>

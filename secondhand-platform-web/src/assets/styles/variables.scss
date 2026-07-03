@@ -1,46 +1,61 @@
 // ============================================
-// SCSS 变量 — 闲物二手交易平台
+// SCSS 变量 — 校园闲物 Paper Market
 // ============================================
 
-// === 主色调 (暖珊瑚色系) ===
-$color-primary: #E07A5F;
-$color-primary-light: #F2A68D;
-$color-primary-lighter: #FDE8E0;
-$color-primary-dark: #C05A3F;
+// === Paper Market 色板 ===
+$color-paper: #F6EFE1;
+$color-paper-2: #FFFCF4;
+$color-paper-3: #EFE6D2;
+$color-ink: #24211A;
+$color-ink-2: #6E6553;
+$color-muted: #A89C84;
+$color-red: #E8532F;
+$color-red-deep: #C43D1D;
+$color-yellow: #F6B63C;
+$color-green: #3E8E56;
+$color-teal: #2F8F85;
 
-// === 背景色 ===
-$color-bg: #FEF9F5;
-$color-bg-warm: #FFF8F3;
-$color-bg-card: #FFFFFF;
-$color-bg-hover: #FFF0EA;
+// === 语义别名 ===
+$color-primary: $color-red;
+$color-primary-light: #F28A66;
+$color-primary-lighter: #FFE0D2;
+$color-primary-dark: $color-red-deep;
 
-// === 文字色 ===
-$color-text: #2D2420;
-$color-text-secondary: #8B7E74;
-$color-text-muted: #B5A99E;
+$color-bg: $color-paper;
+$color-bg-warm: $color-paper;
+$color-bg-card: $color-paper-2;
+$color-bg-hover: #FFF4D7;
 
-// === 边框 ===
-$color-border: #EDE4DC;
-$color-border-light: #F5EFE9;
+$color-text: $color-ink;
+$color-text-secondary: $color-ink-2;
+$color-text-muted: $color-muted;
 
-// === 语义色 ===
-$color-success: #5FA87A;
-$color-warning: #E8A838;
+$color-border: $color-ink;
+$color-border-light: rgba($color-ink, 0.18);
+
+$color-success: $color-green;
+$color-warning: $color-yellow;
 $color-error: #D4554A;
-$color-info: #7B9EA8;
+$color-info: $color-teal;
+$color-price: $color-red;
+$color-danger: $color-error;
 
-// === 阴影 ===
-$shadow-sm: 0 1px 3px rgba(45, 36, 32, 0.06);
-$shadow-md: 0 4px 16px rgba(45, 36, 32, 0.08);
-$shadow-lg: 0 8px 32px rgba(45, 36, 32, 0.10);
-$shadow-card: 0 2px 12px rgba(45, 36, 32, 0.06), 0 1px 2px rgba(45, 36, 32, 0.04);
-$shadow-button: 0 4px 14px rgba(224, 122, 95, 0.3);
+// === 描边与阴影 ===
+$border-ink: 2px solid $color-ink;
+$shadow-hard: 4px 4px 0 $color-ink;
+$shadow-hover: 7px 7px 0 $color-ink;
+$shadow-sm: 2px 2px 0 $color-ink;
+$shadow-md: 4px 4px 0 $color-ink;
+$shadow-lg: 7px 7px 0 $color-ink;
+$shadow-card: $shadow-hard;
+$shadow-button: 4px 4px 0 $color-ink;
 
 // === 圆角 ===
+$radius-xs: 4px;
 $radius-sm: 8px;
-$radius-md: 12px;
-$radius-lg: 16px;
-$radius-xl: 20px;
+$radius-md: 10px;
+$radius-lg: 14px;
+$radius-xl: 18px;
 $radius-full: 9999px;
 
 // === 间距 ===
@@ -52,43 +67,40 @@ $space-xl: 32px;
 $space-2xl: 48px;
 
 // === 字体 ===
-$font-family: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', -apple-system, sans-serif;
+$font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+$font-family-display: 'STKaiti', 'KaiTi', 'Noto Sans SC', 'PingFang SC', sans-serif;
+$font-family-mono: 'Consolas', 'IBM Plex Mono', 'SFMono-Regular', monospace;
+
 $font-size-xs: 12px;
 $font-size-sm: 13px;
 $font-size-md: 15px;
 $font-size-lg: 18px;
 $font-size-xl: 22px;
 $font-size-2xl: 28px;
-$font-size-3xl: 36px;
+$font-size-3xl: 40px;
 
 // === 过渡 ===
 $transition-fast: 0.15s ease;
 $transition-normal: 0.25s ease;
 $transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
-// === 最大宽度 ===
+// === 布局 ===
 $max-width: 1200px;
+$header-height: 68px;
 
-// === 响应式断点（统一全站，配合 mixins.scss 的 respond-down 使用）===
+// === 响应式断点 ===
 $bp-sm: 640px;
 $bp-md: 768px;
 $bp-lg: 960px;
 $bp-xl: 1200px;
 
-// === 排版补充 ===
+// === 排版 ===
 $line-height-tight: 1.25;
 $line-height-normal: 1.6;
 $line-height-relaxed: 1.8;
-$letter-spacing-tight: -0.5px;
+$letter-spacing-tight: 0;
 $letter-spacing-wide: 0.5px;
 $font-weight-medium: 500;
-$font-weight-semibold: 600;
-$font-weight-bold: 700;
-$font-weight-heavy: 800;
-
-// === 布局常量 ===
-$header-height: 68px;
-
-// === 语义色补充 ===
-$color-price: #E0533A; // 价格强调色（统一全站价格，替代散落的 #ff4f0a 等）
-$color-danger: $color-error; // 语义别名，等价 $color-error
+$font-weight-semibold: 700;
+$font-weight-bold: 800;
+$font-weight-heavy: 900;
