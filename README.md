@@ -131,7 +131,7 @@ mysql -u root -p < secondhand-platform/src/main/resources/sql/init.sql
 
 ### 2. 配置后端
 
-数据库连接默认在 `secondhand-platform/src/main/resources/application.yml` 中(默认 `root / 123456`,按本地实际修改)。
+数据库连接默认在 `secondhand-platform/src/main/resources/application.yml` 中。
 
 密钥等敏感配置放在 **`application-local.yml`**(该文件已被 `.gitignore` 忽略,不会提交)。在 `secondhand-platform/src/main/resources/` 下新建:
 
