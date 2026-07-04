@@ -14,7 +14,7 @@
 
 ## 技术栈
 
-### 后端(secondhand-platform)
+### 后端(secondhand-platform-backend)
 
 | 技术 | 版本 | 说明 |
 | --- | --- | --- |
@@ -47,7 +47,7 @@
 - **用户**:注册登录（基于 Redis 的分布式 Session）、个人资料维护（含校区/学院）、信用分
 - **商品**:发布（多图上传、成色、面交地点）、分类浏览、关键词搜索、详情、上下架、库存管理
 - **订单**:下单（填写面交地点）、发货、确认收货、取消/拒发；完整订单状态机，买卖家各自视角软删除
-- **评价**:订单完成后买卖双方互评,支持匿名评价
+- **评价**:订单完成后买家可评价卖家,支持匿名评价,并更新卖家信用分
 - **收藏**:商品收藏与取消
 - **私信**:买卖双方一对一实时聊天(WebSocket),会话列表、聊天记录、未读红点
 - **通知**:订单状态变更与收藏等互动通知,实时推送 + 历史分页 + 已读管理
@@ -56,20 +56,20 @@
 ## 技术亮点
 
 - **Redis 分布式 Session**:Session 外置到 Redis,应用层无状态,便于水平扩展。
-- **Redisson 分布式锁防超卖**:按商品维度加锁(`tryLock` 带等待/持有超时,`finally` 校验持有者再释放),下单扣减库存、取消/拒发回补库存全程串行化,杜绝并发超卖。
+- **Redisson 分布式锁防超卖**:按商品维度加锁(`tryLock` 带等待/持有超时,`finally` 校验持有者再释放),下单扣减库存、取消/拒发回补库存复用同一商品锁,降低并发下库存不一致和超卖风险。
 - **WebSocket 实时推送**:私信与通知基于 Spring 原生 `WebSocketHandler`,握手复用 Spring Session 登录态(无需额外 token),服务端维护「用户→连接」在线表做点对点推送;读写走 REST、WebSocket 只做下行推送,兼顾落库可靠与实时体验。
 - **统一响应 + 全局异常处理**:`Result` 统一返回结构,`@RestControllerAdvice` 全局兜底异常,前端处理更一致。
 - **拦截器鉴权**:`AuthInterceptor` 统一做登录态校验,白名单放行文档与公开接口。
 - **存储抽象**:`UploadPathResolver` 屏蔽本地存储与 OSS 的差异,切换无侵入。
 - **接口文档**:集成 Knife4j(OpenAPI 3),启动后可在线调试。
-- **测试覆盖**:Service / Controller / 工具类均有单元测试。
+- **测试覆盖**:Service / Controller / Config / Interceptor / 工具类均有单元测试。
 - **前端工程化**:Element Plus 按需引入、第三方库分包(vendor 拆分)、生产构建 gzip 压缩。
 
 ## 项目结构
 
 ```
 my-project/
-├── secondhand-platform/             # 后端(Spring Boot)
+├── secondhand-platform-backend/     # 后端(Spring Boot)
 │   └── src/main/
 │       ├── java/com/secondhand/
 │       │   ├── config/              # Redis / Redisson / MyBatis-Plus / Session / OpenAPI 等配置
@@ -79,6 +79,7 @@ my-project/
 │       │   ├── entity/              # 实体与请求/响应对象
 │       │   ├── interceptor/         # 登录鉴权拦截器
 │       │   ├── handler/             # 全局异常处理
+│       │   ├── websocket/           # WebSocket 连接管理与实时推送
 │       │   └── util/                # Result / Session / 密码 / 文件 / 缓存等工具
 │       └── resources/
 │           ├── mapper/              # MyBatis XML
@@ -126,14 +127,14 @@ my-project/
 执行建表脚本(会创建 `secondhand` 库并预置分类):
 
 ```bash
-mysql -u root -p < secondhand-platform/src/main/resources/sql/init.sql
+mysql -u root -p < secondhand-platform-backend/src/main/resources/sql/init.sql
 ```
 
 ### 2. 配置后端
 
-数据库连接默认在 `secondhand-platform/src/main/resources/application.yml` 中。
+数据库连接默认在 `secondhand-platform-backend/src/main/resources/application.yml` 中。
 
-密钥等敏感配置放在 **`application-local.yml`**(该文件已被 `.gitignore` 忽略,不会提交)。在 `secondhand-platform/src/main/resources/` 下新建:
+密钥等敏感配置放在 **`application-local.yml`**(该文件已被 `.gitignore` 忽略,不会提交)。在 `secondhand-platform-backend/src/main/resources/` 下新建:
 
 ```yaml
 app:
@@ -151,7 +152,7 @@ app:
 ### 3. 启动后端
 
 ```bash
-cd secondhand-platform
+cd secondhand-platform-backend
 mvn spring-boot:run
 ```
 
