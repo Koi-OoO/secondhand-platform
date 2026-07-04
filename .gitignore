@@ -11,6 +11,9 @@ Thumbs.db
 # ===== Claude Code 本地配置 =====
 .claude/
 
+# ===== AI 辅助开发过程文档 =====
+docs/superpowers/
+
 # ===== 后端:Java / Maven =====
 target/
 # OSS 密钥等本地配置,双保险(子目录 .gitignore 已忽略)
