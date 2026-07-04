@@ -25,6 +25,9 @@ public class OpenApiConfig {
                         .description("二手交易平台后端在线接口文档。"  // 文档描述
                                 + "认证基于 Spring Session 和 Redis，"
                                 + "涵盖商品、订单、评价、收藏、私信、通知、文件上传与用户等核心能力。"
+                                + "前端开发环境通过 /api 代理到后端，后端真实接口路径不带 /api 前缀。"
+                                + "私信模块中 POST /message/conversation 用于点击联系卖家时创建持久空会话，"
+                                + "GET /message/online-status 返回 online 与 lastActiveTime。"
                                 + "私信与通知的实时推送基于 WebSocket：登录后连接 ws://{host}/ws"
                                 + "（握手复用登录态，无需额外 token），服务端下推 JSON 文本 "
                                 + "{\"type\":\"chat|notification\",\"data\":{...}}；"

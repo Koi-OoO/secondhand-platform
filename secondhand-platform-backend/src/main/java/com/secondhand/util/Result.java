@@ -1,5 +1,10 @@
 package com.secondhand.util;
 
+import com.secondhand.entity.BatchOperationResult;
+import com.secondhand.entity.Conversation;
+import com.secondhand.entity.Evaluation;
+import com.secondhand.entity.Message;
+import com.secondhand.entity.Notification;
 import com.secondhand.entity.Order;
 import com.secondhand.entity.Product;
 import com.secondhand.entity.User;
@@ -19,7 +24,9 @@ public class Result {
     @Schema(description = "提示信息", example = "成功")  // 消息字段的Swagger说明
     private String message;  // 提示信息
 
-    @Schema(description = "响应数据", anyOf = {Product.class, Order.class, User.class})  // 数据字段的Swagger说明
+    @Schema(description = "响应数据；不同接口返回不同业务对象、分页对象、列表或基础类型",
+            anyOf = {User.class, Product.class, Order.class, Evaluation.class,
+                    Message.class, Conversation.class, Notification.class, BatchOperationResult.class})
     private Object data;  // 响应数据，可以是任意类型
 
     /**

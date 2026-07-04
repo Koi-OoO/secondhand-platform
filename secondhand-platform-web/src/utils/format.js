@@ -12,14 +12,21 @@ export function formatPrice(val) {
   return '¥' + Number(val).toFixed(2)
 }
 
+function toDate(val) {
+  if (!val) return null
+  const normalized = typeof val === 'string' ? val.trim().replace(' ', 'T') : val
+  const date = val instanceof Date ? val : new Date(normalized)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 /**
  * 格式化日期
  * @param {string|Date} val
  * @returns {string} 2026-06-01 12:30
  */
 export function formatDate(val) {
-  if (!val) return ''
-  const d = new Date(val)
+  const d = toDate(val)
+  if (!d) return ''
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
@@ -34,8 +41,8 @@ export function formatDate(val) {
  * @returns {string} 2026-06-01
  */
 export function formatDateShort(val) {
-  if (!val) return ''
-  const d = new Date(val)
+  const d = toDate(val)
+  if (!d) return ''
   return d.toISOString().slice(0, 10)
 }
 
@@ -55,10 +62,13 @@ export function maskPhone(phone) {
  * @returns {string} 3分钟前 / 2小时前 / 3天前
  */
 export function relativeTime(val) {
-  if (!val) return ''
+  const date = toDate(val)
+  if (!date) return ''
   const now = Date.now()
-  const then = new Date(val).getTime()
+  const then = date.getTime()
   const diff = now - then
+  if (diff < 0) return formatDate(date)
+
   const sec = Math.floor(diff / 1000)
   const min = Math.floor(sec / 60)
   const hour = Math.floor(min / 60)

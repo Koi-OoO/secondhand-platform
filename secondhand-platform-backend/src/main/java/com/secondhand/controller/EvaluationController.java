@@ -5,6 +5,7 @@ import com.secondhand.service.EvaluationService;
 import com.secondhand.util.Result;
 import com.secondhand.util.SessionUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -35,11 +36,15 @@ public class EvaluationController {
     @PostMapping  // 处理POST请求，路径为 /evaluation
     @Operation(summary = "提交评价", description = "需要登录，买家可为已完成订单提交评分、评价内容和匿名标记")
     @ApiResponse(responseCode = "200", description = "统一Result响应")
-    public Result evaluate(@RequestParam Long orderId,  // 订单ID，从请求参数获取
+    public Result evaluate(@Parameter(description = "订单ID，只能评价当前买家的已完成订单", example = "1", required = true)
+                           @RequestParam Long orderId,  // 订单ID，从请求参数获取
+                           @Parameter(description = "评分，范围1到5", example = "5", required = true)
                            @RequestParam Integer rating,  // 评分（1-5星）
+                           @Parameter(description = "评价内容，可选", example = "卖家沟通及时，物品符合描述")
                            @RequestParam(required = false) String content,  // 评价内容，可选
+                           @Parameter(description = "是否匿名评价，默认false", example = "false")
                            @RequestParam(defaultValue = "false") Boolean anonymous,  // 是否匿名，默认false
-                           HttpSession session) {  // HttpSession对象，用于获取当前用户
+                           @Parameter(hidden = true) HttpSession session) {  // HttpSession对象，用于获取当前用户
         // 从session中获取用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -57,8 +62,11 @@ public class EvaluationController {
     @Operation(summary = "查询收到的评价", description = "公开接口，返回指定用户收到的评价列表，匿名评价会隐藏评价人身份")
     @ApiResponse(responseCode = "200", description = "Result.data.records中包含评价列表",
             content = @Content(schema = @Schema(implementation = Evaluation.class)))
-    public Result userEvals(@PathVariable Long userId,  // 用户ID，从路径中获取
+    public Result userEvals(@Parameter(description = "被评价用户ID", example = "2", required = true)
+                            @PathVariable Long userId,  // 用户ID，从路径中获取
+                            @Parameter(description = "页码，从1开始", example = "1")
                             @RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+                            @Parameter(description = "每页条数", example = "12")
                             @RequestParam(defaultValue = "12") Integer size) {  // 每页条数，默认12
         // 调用service层分页查询用户收到的评价
         return evaluationService.getUserEvaluations(userId, page, size);

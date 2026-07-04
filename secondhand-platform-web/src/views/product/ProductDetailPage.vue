@@ -97,7 +97,7 @@
                   <el-icon class="btn-icon"><Star /></el-icon>
                   {{ isFavorited ? '取消收藏' : '收藏商品' }}
                 </el-button>
-                <el-button size="large" @click="onContact">
+                <el-button size="large" :loading="contactLoading" @click="onContact">
                   <el-icon class="btn-icon"><ChatDotRound /></el-icon>
                   联系卖家
                 </el-button>
@@ -132,16 +132,18 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Star, ChatDotRound, Location } from '@element-plus/icons-vue'
 import { addFavorite, getFavoriteStatus, getProductDetail, getProductPage, removeFavorite } from '@/api/product'
 import { createOrder } from '@/api/order'
+import { createConversation } from '@/api/message'
 import ProductCard from '@/components/common/ProductCard.vue'
 import { useUserStore } from '@/stores/user'
 import { CONDITION, PRODUCT_STATUS, PRODUCT_STATUS_COLOR } from '@/utils/constant'
 import { formatPrice, relativeTime } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 
 const product = ref(null)
@@ -154,6 +156,7 @@ const purchaseQuantity = ref(1)
 const isFavorited = ref(false)
 const favoriteLoading = ref(false)
 const wantLoading = ref(false)
+const contactLoading = ref(false)
 
 const conditionMap = CONDITION
 const statusMap = PRODUCT_STATUS
@@ -272,8 +275,36 @@ async function onWant() {
   }
 }
 
-function onContact() {
-  ElMessage.info('聊天功能开发中')
+async function onContact() {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    router.push({ name: 'Login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!product.value?.sellerId) {
+    ElMessage.warning('卖家信息不存在')
+    return
+  }
+  if (contactLoading.value) {
+    return
+  }
+
+  contactLoading.value = true
+  try {
+    await createConversation(product.value.sellerId, product.value.id, { skipErrorMessage: true })
+  } catch {
+    ElMessage.warning('会话暂时未持久化，请确认后端数据库已更新')
+  } finally {
+    contactLoading.value = false
+  }
+
+  router.push({
+    path: '/messages',
+    query: {
+      peerId: product.value.sellerId,
+      productId: product.value.id
+    }
+  })
 }
 </script>
 

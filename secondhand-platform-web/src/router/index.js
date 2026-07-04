@@ -58,6 +58,12 @@ const routes = [
     component: () => import('@/views/product/ProductPublishPage.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
+  {
+    path: '/messages',
+    name: 'Messages',
+    component: () => import('@/views/message/MessageCenterPage.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
 
   // === 用户中心（需登录） ===
   {

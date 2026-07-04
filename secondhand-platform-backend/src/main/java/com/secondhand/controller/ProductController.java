@@ -160,7 +160,8 @@ public class ProductController {
      */
     @PutMapping("/off-shelf/{id}")  // PUT请求，路径 /product/off-shelf/{id}
     @Operation(summary = "下架商品", description = "需要登录，且只有卖家可以执行该操作")
-    public Result offShelf(@PathVariable Long id,  // 商品ID，从路径获取
+    public Result offShelf(@Parameter(description = "商品ID", example = "100", required = true)
+                           @PathVariable Long id,  // 商品ID，从路径获取
                            @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -177,7 +178,8 @@ public class ProductController {
      */
     @PutMapping("/on-shelf/{id}")  // PUT请求，路径 /product/on-shelf/{id}
     @Operation(summary = "上架商品", description = "需要登录，且只有卖家可以执行该操作，库存必须大于0")
-    public Result onShelf(@PathVariable Long id,  // 商品ID，从路径获取
+    public Result onShelf(@Parameter(description = "商品ID", example = "100", required = true)
+                          @PathVariable Long id,  // 商品ID，从路径获取
                           @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -194,7 +196,8 @@ public class ProductController {
      */
     @PostMapping("/{id}/favorite")  // POST请求，路径 /product/{id}/favorite
     @Operation(summary = "添加收藏", description = "需要登录，只能收藏当前在售商品")
-    public Result addFavorite(@PathVariable Long id,  // 商品ID
+    public Result addFavorite(@Parameter(description = "商品ID", example = "100", required = true)
+                              @PathVariable Long id,  // 商品ID
                               @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -211,7 +214,8 @@ public class ProductController {
      */
     @DeleteMapping("/{id}/favorite")  // DELETE请求，路径 /product/{id}/favorite
     @Operation(summary = "取消收藏", description = "需要登录，删除当前用户对该商品的收藏记录")
-    public Result removeFavorite(@PathVariable Long id,  // 商品ID
+    public Result removeFavorite(@Parameter(description = "商品ID", example = "100", required = true)
+                                 @PathVariable Long id,  // 商品ID
                                  @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -228,7 +232,9 @@ public class ProductController {
      */
     @GetMapping("/my-favorites")  // GET请求，路径 /product/my-favorites
     @Operation(summary = "查询我的收藏", description = "需要登录，分页返回当前用户的收藏记录")
-    public Result myFavorites(@RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+    public Result myFavorites(@Parameter(description = "页码，从1开始", example = "1")
+                              @RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+                              @Parameter(description = "每页条数", example = "12")
                               @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
                               @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
@@ -246,7 +252,8 @@ public class ProductController {
      */
     @GetMapping("/{id}/favorite/status")  // GET请求，路径 /product/{id}/favorite/status
     @Operation(summary = "查询收藏状态", description = "需要登录，返回当前用户是否已收藏该商品")
-    public Result favoriteStatus(@PathVariable Long id,  // 商品ID
+    public Result favoriteStatus(@Parameter(description = "商品ID", example = "100", required = true)
+                                 @PathVariable Long id,  // 商品ID
                                  @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -263,8 +270,11 @@ public class ProductController {
      */
     @PostMapping("/{id}/report")  // POST请求，路径 /product/{id}/report
     @Operation(summary = "举报商品", description = "需要登录，同一用户24小时内对同一商品最多举报一次")
-    public Result report(@PathVariable Long id,  // 商品ID
+    public Result report(@Parameter(description = "商品ID", example = "100", required = true)
+                         @PathVariable Long id,  // 商品ID
+                         @Parameter(description = "举报原因", example = "虚假信息", required = true)
                          @RequestParam String reason,  // 举报原因
+                         @Parameter(description = "举报详情，可选", example = "图片和描述不一致")
                          @RequestParam(required = false) String detail,  // 举报详情，可选
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 获取当前登录用户ID
@@ -282,7 +292,8 @@ public class ProductController {
      */
     @DeleteMapping("/{id}")  // DELETE请求，路径 /product/{id}
     @Operation(summary = "删除商品", description = "需要登录，仅限卖家本人，只能删除已下架或已售出的商品")
-    public Result delete(@PathVariable Long id,  // 商品ID
+    public Result delete(@Parameter(description = "商品ID", example = "100", required = true)
+                         @PathVariable Long id,  // 商品ID
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {

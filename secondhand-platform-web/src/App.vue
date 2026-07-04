@@ -37,10 +37,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useUserStore } from '@/stores/user'
+import { useMessageStore } from '@/stores/message'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import BackToTop from '@/components/common/BackToTop.vue'
@@ -48,15 +49,34 @@ import TopProgressBar from '@/components/common/TopProgressBar.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
+const messageStore = useMessageStore()
 
 const isUserRoute = computed(() => route.path.startsWith('/user'))
 const blankLayout = computed(() => route.meta.layout === 'blank')
 
-onMounted(() => {
+onMounted(async () => {
   // 不在游客页（登录/注册）触发 restoreSession，避免 401 → 重定向 → 循环闪屏
   if (!route.meta.guest) {
-    userStore.restoreSession()
+    await userStore.restoreSession()
   }
+  if (userStore.isLoggedIn) {
+    messageStore.bootstrap()
+  }
+})
+
+watch(
+  () => userStore.isLoggedIn,
+  loggedIn => {
+    if (loggedIn) {
+      messageStore.bootstrap()
+    } else {
+      messageStore.reset()
+    }
+  }
+)
+
+onUnmounted(() => {
+  messageStore.disconnect()
 })
 </script>
 

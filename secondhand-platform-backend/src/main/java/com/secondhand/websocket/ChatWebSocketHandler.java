@@ -1,6 +1,7 @@
 package com.secondhand.websocket;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -28,6 +29,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     // 在线连接表：一个用户可能多标签页/多端登录，故value用线程安全的Set
     private final ConcurrentHashMap<Long, Set<WebSocketSession>> onlineSessions = new ConcurrentHashMap<>();
 
+    // 最后活跃时间：连接建立、心跳、最后一个连接关闭时更新，用于前端展示「刚刚在线」
+    private final ConcurrentHashMap<Long, Long> lastActiveTimes = new ConcurrentHashMap<>();
+
     /**
      * 连接建立：把当前连接登记到在线表
      */
@@ -40,6 +44,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
         // computeIfAbsent并发安全地初始化集合，再把当前连接加入
         onlineSessions.computeIfAbsent(userId, k -> ConcurrentHashMap.<WebSocketSession>newKeySet()).add(session);
+        touchUser(userId);
         log.info("WebSocket连接建立：userId={} 该用户在线连接数={}", userId, onlineSessions.get(userId).size());
     }
 
@@ -59,7 +64,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             sessions.remove(session);  // 移除当前关闭的连接
             if (sessions.isEmpty()) {
                 onlineSessions.remove(userId);  // 该用户已全部离线，清理key
+                touchUser(userId);
             }
+        } else {
+            touchUser(userId);
         }
         log.info("WebSocket连接关闭：userId={}", userId);
     }
@@ -71,6 +79,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         // 客户端定时发送ping用于保活
         if ("ping".equals(message.getPayload())) {
+            Long userId = currentUserId(session);
+            if (userId != null) {
+                touchUser(userId);
+            }
             // WebSocketSession非线程安全，发送需串行化
             synchronized (session) {
                 session.sendMessage(new TextMessage("pong"));  // 心跳应答
@@ -116,7 +128,24 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      */
     public boolean isOnline(Long userId) {
         Set<WebSocketSession> sessions = onlineSessions.get(userId);
-        return sessions != null && !sessions.isEmpty();
+        if (sessions == null || sessions.isEmpty()) {
+            return false;
+        }
+        sessions.removeIf(session -> !session.isOpen());
+        if (sessions.isEmpty()) {
+            onlineSessions.remove(userId);
+            touchUser(userId);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 查询用户最后活跃时间，用于前端展示「刚刚在线 / 10分钟前在线」。
+     */
+    public Date getLastActiveTime(Long userId) {
+        Long timestamp = lastActiveTimes.get(userId);
+        return timestamp == null ? null : new Date(timestamp);
     }
 
     /**
@@ -125,5 +154,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private Long currentUserId(WebSocketSession session) {
         Object userId = session.getAttributes().get(USER_ID_KEY);
         return userId instanceof Long ? (Long) userId : null;
+    }
+
+    private void touchUser(Long userId) {
+        if (userId != null) {
+            lastActiveTimes.put(userId, System.currentTimeMillis());
+        }
     }
 }

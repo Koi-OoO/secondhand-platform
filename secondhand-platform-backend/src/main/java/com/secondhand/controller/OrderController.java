@@ -7,6 +7,10 @@ import com.secondhand.service.OrderService;
 import com.secondhand.util.Result;
 import com.secondhand.util.SessionUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController  // 标识为REST控制器，返回JSON数据
 @RequestMapping("/order")  // 请求路径前缀为 /order
 @Tag(name = "订单管理", description = "提供订单创建、买卖双方订单查询、状态流转和历史隐藏等接口")  // Swagger文档标签
+@ApiResponse(responseCode = "200", description = "统一 Result 响应",
+        content = @Content(schema = @Schema(implementation = Result.class)))
 public class OrderController {
 
     @Autowired  // 自动注入OrderService
@@ -36,10 +42,13 @@ public class OrderController {
      */
     @PostMapping("/create")  // POST请求，路径 /order/create
     @Operation(summary = "创建订单", description = "需要登录，根据商品ID、购买数量和收货地址创建订单")
-    public Result create(@RequestParam Long productId,  // 商品ID
+    public Result create(@Parameter(description = "商品ID", example = "100", required = true)
+                         @RequestParam Long productId,  // 商品ID
+                         @Parameter(description = "购买数量，必须大于0且不能超过库存", example = "1", required = true)
                          @RequestParam Integer quantity,  // 购买数量
+                         @Parameter(description = "面交或收货地址", example = "东区食堂门口", required = true)
                          @RequestParam String address,  // 收货地址
-                         HttpSession session) {  // HttpSession获取当前用户
+                         @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 从session获取用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -55,9 +64,11 @@ public class OrderController {
      */
     @GetMapping("/bought")  // GET请求，路径 /order/bought
     @Operation(summary = "查询我买到的订单", description = "需要登录，分页返回当前用户作为买家的订单")
-    public Result bought(@RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+    public Result bought(@Parameter(description = "页码，从1开始", example = "1")
+                         @RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+                         @Parameter(description = "每页条数", example = "12")
                          @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
-                         HttpSession session) {
+                         @Parameter(hidden = true) HttpSession session) {
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -73,9 +84,11 @@ public class OrderController {
      */
     @GetMapping("/sold")  // GET请求，路径 /order/sold
     @Operation(summary = "查询我卖出的订单", description = "需要登录，分页返回当前用户作为卖家的订单")
-    public Result sold(@RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+    public Result sold(@Parameter(description = "页码，从1开始", example = "1")
+                       @RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
+                       @Parameter(description = "每页条数", example = "12")
                        @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
-                       HttpSession session) {
+                       @Parameter(hidden = true) HttpSession session) {
         // 获取当前登录用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -91,8 +104,9 @@ public class OrderController {
      */
     @DeleteMapping("/{id}/buyer")  // DELETE请求，路径 /order/{id}/buyer
     @Operation(summary = "买家隐藏订单", description = "需要登录，仅买家可隐藏已完成或已取消订单的买家视角记录，隐藏后卖家仍可见")
-    public Result hideBought(@PathVariable Long id,  // 订单ID，从路径获取
-                             HttpSession session) {
+    public Result hideBought(@Parameter(description = "订单ID", example = "1", required = true)
+                             @PathVariable Long id,  // 订单ID，从路径获取
+                             @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -108,8 +122,12 @@ public class OrderController {
      */
     @DeleteMapping("/batch/buyer")  // DELETE请求，路径 /order/batch/buyer
     @Operation(summary = "买家批量隐藏订单", description = "需要登录，批量隐藏买家视角中的已完成或已取消订单记录")
-    public Result batchHideBought(@RequestBody OrderBatchIdsRequest request,  // 请求体，包含订单ID列表
-                                  HttpSession session) {
+    public Result batchHideBought(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                                      description = "订单ID列表，只处理当前买家的已完成或已取消订单",
+                                      required = true,
+                                      content = @Content(schema = @Schema(implementation = OrderBatchIdsRequest.class)))
+                                  @RequestBody OrderBatchIdsRequest request,  // 请求体，包含订单ID列表
+                                  @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -125,8 +143,9 @@ public class OrderController {
      */
     @DeleteMapping("/{id}/seller")  // DELETE请求，路径 /order/{id}/seller
     @Operation(summary = "卖家隐藏订单", description = "需要登录，仅卖家可隐藏已完成或已取消订单的卖家视角记录，隐藏后买家仍可见")
-    public Result hideSold(@PathVariable Long id,  // 订单ID
-                           HttpSession session) {
+    public Result hideSold(@Parameter(description = "订单ID", example = "1", required = true)
+                           @PathVariable Long id,  // 订单ID
+                           @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -142,8 +161,12 @@ public class OrderController {
      */
     @DeleteMapping("/batch/seller")  // DELETE请求，路径 /order/batch/seller
     @Operation(summary = "卖家批量隐藏订单", description = "需要登录，批量隐藏卖家视角中的已完成或已取消订单记录")
-    public Result batchHideSold(@RequestBody OrderBatchIdsRequest request,  // 请求体，包含订单ID列表
-                                HttpSession session) {
+    public Result batchHideSold(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                                    description = "订单ID列表，只处理当前卖家的已完成或已取消订单",
+                                    required = true,
+                                    content = @Content(schema = @Schema(implementation = OrderBatchIdsRequest.class)))
+                                @RequestBody OrderBatchIdsRequest request,  // 请求体，包含订单ID列表
+                                @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -159,7 +182,7 @@ public class OrderController {
      */
     @GetMapping("/pending-count")  // GET请求，路径 /order/pending-count
     @Operation(summary = "查询待处理订单数", description = "需要登录，返回待发货和待收货订单的合计数量")
-    public Result pendingCount(HttpSession session) {
+    public Result pendingCount(@Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -175,8 +198,9 @@ public class OrderController {
      */
     @PutMapping("/{id}/cancel")  // PUT请求，路径 /order/{id}/cancel
     @Operation(summary = "取消订单", description = "需要登录，买家可取消待发货订单，并回补商品库存")
-    public Result cancel(@PathVariable Long id,  // 订单ID
-                         HttpSession session) {
+    public Result cancel(@Parameter(description = "订单ID", example = "1", required = true)
+                         @PathVariable Long id,  // 订单ID
+                         @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -192,9 +216,11 @@ public class OrderController {
      */
     @PutMapping("/{id}/ship")  // PUT请求，路径 /order/{id}/ship
     @Operation(summary = "订单发货", description = "需要登录，卖家填写快递单号后将订单标记为已发货")
-    public Result ship(@PathVariable Long id,  // 订单ID
+    public Result ship(@Parameter(description = "订单ID", example = "1", required = true)
+                       @PathVariable Long id,  // 订单ID
+                       @Parameter(description = "快递单号或面交凭证编号", example = "SF1234567890", required = true)
                        @RequestParam String expressNo,  // 快递单号
-                       HttpSession session) {
+                       @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -210,8 +236,12 @@ public class OrderController {
      */
     @PutMapping("/batch/ship")  // PUT请求，路径 /order/batch/ship
     @Operation(summary = "批量发货", description = "需要登录，卖家可批量提交多个订单的快递单号")
-    public Result batchShip(@RequestBody OrderBatchShipRequest request,  // 请求体，包含订单ID和快递单号列表
-                            HttpSession session) {
+    public Result batchShip(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                                description = "批量发货列表，每项包含 orderId 和 expressNo",
+                                required = true,
+                                content = @Content(schema = @Schema(implementation = OrderBatchShipRequest.class)))
+                            @RequestBody OrderBatchShipRequest request,  // 请求体，包含订单ID和快递单号列表
+                            @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -227,9 +257,11 @@ public class OrderController {
      */
     @PutMapping("/{id}/reject")  // PUT请求，路径 /order/{id}/reject
     @Operation(summary = "拒绝发货", description = "需要登录，卖家可拒绝待发货订单，并回补商品库存")
-    public Result reject(@PathVariable Long id,  // 订单ID
+    public Result reject(@Parameter(description = "订单ID", example = "1", required = true)
+                         @PathVariable Long id,  // 订单ID
+                         @Parameter(description = "拒绝原因，可选", example = "商品已损坏")
                          @RequestParam(required = false) String reason,  // 拒绝原因，可选
-                         HttpSession session) {
+                         @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -245,8 +277,12 @@ public class OrderController {
      */
     @PutMapping("/batch/reject")  // PUT请求，路径 /order/batch/reject
     @Operation(summary = "批量拒绝发货", description = "需要登录，卖家可批量拒绝待发货订单并回补库存")
-    public Result batchReject(@RequestBody OrderBatchRejectRequest request,  // 请求体，包含订单ID列表和拒绝原因
-                              HttpSession session) {
+    public Result batchReject(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                                  description = "批量拒绝请求，包含订单ID列表和统一拒绝原因",
+                                  required = true,
+                                  content = @Content(schema = @Schema(implementation = OrderBatchRejectRequest.class)))
+                              @RequestBody OrderBatchRejectRequest request,  // 请求体，包含订单ID列表和拒绝原因
+                              @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -264,8 +300,9 @@ public class OrderController {
      */
     @PutMapping("/{id}/confirm")  // PUT请求，路径 /order/{id}/confirm
     @Operation(summary = "确认收货", description = "需要登录，买家确认收到商品后订单完成")
-    public Result confirm(@PathVariable Long id,  // 订单ID
-                          HttpSession session) {
+    public Result confirm(@Parameter(description = "订单ID", example = "1", required = true)
+                          @PathVariable Long id,  // 订单ID
+                          @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
         // 未登录

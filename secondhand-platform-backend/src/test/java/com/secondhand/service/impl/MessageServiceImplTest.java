@@ -3,14 +3,19 @@ package com.secondhand.service.impl;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.secondhand.entity.Conversation;
 import com.secondhand.entity.Message;
 import com.secondhand.entity.User;
+import com.secondhand.mapper.ConversationMapper;
 import com.secondhand.mapper.MessageMapper;
 import com.secondhand.mapper.UserMapper;
 import com.secondhand.util.Result;
 import com.secondhand.websocket.ChatWebSocketHandler;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,6 +36,7 @@ import static org.mockito.Mockito.when;
 class MessageServiceImplTest {
 
     private MessageMapper messageMapper;
+    private ConversationMapper conversationMapper;
     private UserMapper userMapper;
     private ChatWebSocketHandler chatWebSocketHandler;
     private MessageServiceImpl service;
@@ -46,10 +53,12 @@ class MessageServiceImplTest {
     void setUp() {
         // 手动mock依赖并通过反射注入（与项目现有Service测试一致）
         messageMapper = mock(MessageMapper.class);
+        conversationMapper = mock(ConversationMapper.class);
         userMapper = mock(UserMapper.class);
         chatWebSocketHandler = mock(ChatWebSocketHandler.class);
         service = new MessageServiceImpl();
         ReflectionTestUtils.setField(service, "messageMapper", messageMapper);
+        ReflectionTestUtils.setField(service, "conversationMapper", conversationMapper);
         ReflectionTestUtils.setField(service, "userMapper", userMapper);
         ReflectionTestUtils.setField(service, "chatWebSocketHandler", chatWebSocketHandler);
     }
@@ -100,6 +109,117 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void createOrGetConversationCreatesEmptyConversationForValidPeer() {
+        User peer = new User();
+        peer.setId(2L);
+        peer.setNickname("卖家");
+        peer.setAvatar("avatar.png");
+        when(userMapper.selectById(2L)).thenReturn(peer);
+        when(conversationMapper.selectByPair(1L, 2L)).thenReturn(null);
+        doAnswer(invocation -> {
+            Conversation conversation = invocation.getArgument(0);
+            conversation.setId(10L);
+            return 1;
+        }).when(conversationMapper).insert(any(Conversation.class));
+
+        Result result = service.createOrGetConversation(1L, 2L, 100L);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) result.getData();
+        assertThat(data)
+                .containsEntry("conversationId", 10L)
+                .containsEntry("peerId", 2L)
+                .containsEntry("peerNickname", "卖家")
+                .containsEntry("peerAvatar", "avatar.png")
+                .containsEntry("productId", 100L)
+                .containsEntry("lastContent", null)
+                .containsEntry("unreadCount", 0);
+
+        ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
+        verify(conversationMapper).insert(captor.capture());
+        Conversation saved = captor.getValue();
+        assertThat(saved.getUser1Id()).isEqualTo(1L);
+        assertThat(saved.getUser2Id()).isEqualTo(2L);
+        assertThat(saved.getProductId()).isEqualTo(100L);
+        assertThat(saved.getLastMessageId()).isNull();
+        assertThat(saved.getLastTime()).isNotNull();
+    }
+
+    @Test
+    void createOrGetConversationRejectsSelfAndMissingPeer() {
+        assertThat(service.createOrGetConversation(1L, null, 100L).getMessage()).isEqualTo("请选择联系人");
+        assertThat(service.createOrGetConversation(1L, 1L, 100L).getMessage()).isEqualTo("不能给自己发送私信");
+
+        when(userMapper.selectById(99L)).thenReturn(null);
+        Result missingPeer = service.createOrGetConversation(1L, 99L, 100L);
+
+        assertThat(missingPeer.getCode()).isEqualTo(500);
+        assertThat(missingPeer.getMessage()).isEqualTo("联系人不存在");
+        verify(conversationMapper, never()).insert(any(Conversation.class));
+    }
+
+    @Test
+    void createOrGetConversationKeepsExistingConversationAndFillsMissingProduct() {
+        User peer = new User();
+        peer.setId(2L);
+        peer.setUsername("seller");
+        Conversation existing = new Conversation();
+        existing.setId(11L);
+        existing.setUser1Id(1L);
+        existing.setUser2Id(2L);
+        existing.setLastTime(new Date());
+
+        when(userMapper.selectById(2L)).thenReturn(peer);
+        when(conversationMapper.selectByPair(1L, 2L)).thenReturn(existing);
+
+        Result result = service.createOrGetConversation(1L, 2L, 100L);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) result.getData();
+        assertThat(data)
+                .containsEntry("conversationId", 11L)
+                .containsEntry("peerId", 2L)
+                .containsEntry("peerNickname", null)
+                .containsEntry("peerUsername", "seller")
+                .containsEntry("productId", 100L);
+
+        ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
+        verify(conversationMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(11L);
+        assertThat(captor.getValue().getProductId()).isEqualTo(100L);
+    }
+
+    @Test
+    void sendUpdatesConversationLastMessage() {
+        User receiver = new User();
+        receiver.setId(2L);
+        Conversation existing = new Conversation();
+        existing.setId(7L);
+        existing.setUser1Id(1L);
+        existing.setUser2Id(2L);
+        when(userMapper.selectById(2L)).thenReturn(receiver);
+        when(conversationMapper.selectByPair(1L, 2L)).thenReturn(existing);
+        doAnswer(invocation -> {
+            Message message = invocation.getArgument(0);
+            message.setId(99L);
+            return 1;
+        }).when(messageMapper).insert(any(Message.class));
+
+        Result result = service.send(1L, 2L, "你好", 100L);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
+        verify(conversationMapper).updateById(captor.capture());
+        Conversation updated = captor.getValue();
+        assertThat(updated.getId()).isEqualTo(7L);
+        assertThat(updated.getLastMessageId()).isEqualTo(99L);
+        assertThat(updated.getProductId()).isEqualTo(100L);
+        assertThat(updated.getLastTime()).isNotNull();
+    }
+
+    @Test
     void getChatMarksPeerMessagesReadThenPages() {
         when(messageMapper.selectPage(any(), any())).thenReturn(new Page<>(1, 20));
 
@@ -131,12 +251,33 @@ class MessageServiceImplTest {
     }
 
     @Test
-    void getConversationsReturnsEmptyWhenNoMessages() {
-        when(messageMapper.selectConversationSummaries(1L)).thenReturn(Collections.emptyList());
+    void getOnlineStatusReturnsDeduplicatedStatusMap() {
+        Date activeAt = new Date(1700000000000L);
+        when(chatWebSocketHandler.isOnline(2L)).thenReturn(true);
+        when(chatWebSocketHandler.isOnline(3L)).thenReturn(false);
+        when(chatWebSocketHandler.getLastActiveTime(2L)).thenReturn(activeAt);
+
+        Result result = service.getOnlineStatus(Arrays.asList(2L, 3L, 2L, null, -1L));
+
+        assertThat(result.getCode()).isEqualTo(200);
+        @SuppressWarnings("unchecked")
+        Map<Long, Map<String, Object>> data = (Map<Long, Map<String, Object>>) result.getData();
+        assertThat(data.get(2L)).containsEntry("online", true)
+                .containsEntry("lastActiveTime", activeAt);
+        assertThat(data.get(3L)).containsEntry("online", false)
+                .containsEntry("lastActiveTime", null);
+        assertThat(data).hasSize(2);
+    }
+
+    @Test
+    void getConversationsReturnsRowsFromConversationMapper() {
+        List<Map<String, Object>> summaries = Collections.singletonList(Collections.singletonMap("peerId", 2L));
+        when(conversationMapper.selectConversationSummaries(1L)).thenReturn(summaries);
 
         Result result = service.getConversations(1L);
 
         assertThat(result.getCode()).isEqualTo(200);
-        assertThat((List<?>) result.getData()).isEmpty();
+        assertThat(result.getData()).isEqualTo(summaries);
+        verify(messageMapper, never()).selectConversationSummaries(1L);
     }
 }

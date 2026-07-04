@@ -141,6 +141,23 @@ CREATE TABLE `message` (
   KEY `idx_pair` (`from_user_id`, `to_user_id`, `create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='private messages';
 
+DROP TABLE IF EXISTS `conversation`;
+CREATE TABLE `conversation` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'conversation id',
+  `user1_id` BIGINT NOT NULL COMMENT 'smaller user id in the pair',
+  `user2_id` BIGINT NOT NULL COMMENT 'larger user id in the pair',
+  `product_id` BIGINT DEFAULT NULL COMMENT 'related product id from contact entry, nullable',
+  `last_message_id` BIGINT DEFAULT NULL COMMENT 'last message id, nullable before first message',
+  `last_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'last active time',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_pair` (`user1_id`, `user2_id`),
+  KEY `idx_user1_last` (`user1_id`, `last_time`),
+  KEY `idx_user2_last` (`user2_id`, `last_time`),
+  KEY `idx_last_message` (`last_message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='private message conversations';
+
 DROP TABLE IF EXISTS `notification`;
 CREATE TABLE `notification` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'notification id',

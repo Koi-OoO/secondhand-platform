@@ -5,6 +5,10 @@ import com.secondhand.service.UserService;
 import com.secondhand.util.Result;
 import com.secondhand.util.SessionUtil;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import javax.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController  // 标识为REST控制器，所有方法返回JSON格式数据
 @RequestMapping("/user")  // 该控制器的请求路径前缀为 /user
 @Tag(name = "用户管理", description = "提供注册、登录、退出和个人资料维护等接口")  // Swagger文档分组标签
+@ApiResponse(responseCode = "200", description = "统一 Result 响应",
+        content = @Content(schema = @Schema(implementation = Result.class)))
 public class UserController {
 
     @Autowired  // 自动注入UserService
@@ -31,8 +37,13 @@ public class UserController {
      * 用户登录
      */
     @PostMapping("/login")  // 处理POST请求，路径为 /user/login
-    @Operation(summary = "用户登录", description = "使用用户名和密码登录，成功后创建会话")  // Swagger接口说明
-    public Result login(@RequestBody User user, HttpSession session) {
+    @Operation(summary = "用户登录", description = "公开接口，使用用户名和密码登录；成功后服务端创建 Spring Session，前端后续请求携带 Cookie 即可")  // Swagger接口说明
+    public Result login(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            description = "登录请求体，仅需要 username 和 password",
+                            required = true,
+                            content = @Content(schema = @Schema(implementation = User.class)))
+                        @RequestBody User user,
+                        @Parameter(hidden = true) HttpSession session) {
         // 调用service层校验登录
         Result r = userService.login(user.getUsername(), user.getPassword());
         // 登录成功（code=200）
@@ -50,8 +61,12 @@ public class UserController {
      * 用户注册
      */
     @PostMapping("/register")  // 处理POST请求，路径为 /user/register
-    @Operation(summary = "用户注册", description = "创建普通用户账号")
-    public Result register(@RequestBody User user) {  // @RequestBody接收JSON请求体
+    @Operation(summary = "用户注册", description = "公开接口，创建普通用户账号")
+    public Result register(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                               description = "注册请求体，username 和 password 必填，nickname、avatar、phone、email 等可选",
+                               required = true,
+                               content = @Content(schema = @Schema(implementation = User.class)))
+                           @RequestBody User user) {  // @RequestBody接收JSON请求体
         // 直接调用service层注册
         return userService.register(user);
     }
@@ -61,7 +76,7 @@ public class UserController {
      */
     @GetMapping("/profile")  // 处理GET请求，路径为 /user/profile
     @Operation(summary = "查询当前用户资料", description = "需要登录，返回当前用户最新的个人资料")
-    public Result profile(HttpSession session) {
+    public Result profile(@Parameter(hidden = true) HttpSession session) {
         // 从session中获取当前用户
         User user = SessionUtil.getUser(session);
         // 未登录
@@ -85,7 +100,8 @@ public class UserController {
      */
     @GetMapping("/public/{userId}")  // 处理GET请求，路径为 /user/public/{userId}
     @Operation(summary = "查询公开用户资料", description = "公开接口，返回用户主页展示所需的资料信息")
-    public Result publicProfile(@PathVariable Long userId) {  // @PathVariable从路径中获取userId
+    public Result publicProfile(@Parameter(description = "用户ID", example = "2", required = true)
+                                @PathVariable Long userId) {  // @PathVariable从路径中获取userId
         // 校验userId是否有效
         if (userId == null || userId <= 0) {
             return Result.error("用户 ID 无效");
@@ -107,8 +123,13 @@ public class UserController {
      * 更新当前登录用户资料
      */
     @PutMapping("/update")  // 处理PUT请求，路径为 /user/update
-    @Operation(summary = "更新个人资料", description = "需要登录，支持更新昵称、头像、手机号、邮箱、地址等字段")
-    public Result update(@RequestBody User user, HttpSession session) {
+    @Operation(summary = "更新个人资料", description = "需要登录，支持更新昵称、头像、手机号、邮箱、地址、校区等字段；用户ID以Session为准，前端传入id会被忽略")
+    public Result update(@io.swagger.v3.oas.annotations.parameters.RequestBody(
+                             description = "个人资料请求体，可提交 nickname、avatar、phone、email、address、campus、birthday、gender 等字段",
+                             required = true,
+                             content = @Content(schema = @Schema(implementation = User.class)))
+                         @RequestBody User user,
+                         @Parameter(hidden = true) HttpSession session) {
         // 从session中获取用户ID（不信任前端传入的ID，防止越权）
         Long userId = SessionUtil.getUserId(session);
         // 未登录
@@ -139,7 +160,7 @@ public class UserController {
      */
     @PostMapping("/logout")  // 处理POST请求，路径为 /user/logout
     @Operation(summary = "退出登录", description = "需要登录，清空当前会话")
-    public Result logout(HttpSession session) {
+    public Result logout(@Parameter(hidden = true) HttpSession session) {
         // 清空session中的用户信息
         SessionUtil.logout(session);
         // 返回成功

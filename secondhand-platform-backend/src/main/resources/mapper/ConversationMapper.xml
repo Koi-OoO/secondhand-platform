@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.secondhand.mapper.ConversationMapper">
+
+    <select id="selectByPair" resultType="com.secondhand.entity.Conversation">
+        SELECT *
+        FROM conversation
+        WHERE user1_id = #{user1Id}
+          AND user2_id = #{user2Id}
+        LIMIT 1
+    </select>
+
+    <!--
+      从 conversation 表查询会话列表，因此点击“联系卖家”但尚未发消息的空会话也会返回。
+      last_message_id 为空时 lastContent 为空，前端显示“打开会话开始沟通”。
+    -->
+    <select id="selectConversationSummaries" resultType="java.util.Map">
+        SELECT
+            c.id AS conversationId,
+            CASE WHEN c.user1_id = #{me} THEN c.user2_id ELSE c.user1_id END AS peerId,
+            c.product_id AS productId,
+            c.last_message_id AS lastId,
+            m.content AS lastContent,
+            COALESCE(m.create_time, c.last_time) AS lastTime,
+            COALESCE(unread.unreadCount, 0) AS unreadCount,
+            u.nickname AS peerNickname,
+            u.username AS peerUsername,
+            u.avatar AS peerAvatar
+        FROM conversation c
+        LEFT JOIN message m ON c.last_message_id = m.id
+        LEFT JOIN (
+            SELECT
+                from_user_id AS peerId,
+                COUNT(*) AS unreadCount
+            FROM message
+            WHERE to_user_id = #{me}
+              AND is_read = 0
+            GROUP BY from_user_id
+        ) unread ON unread.peerId = CASE WHEN c.user1_id = #{me} THEN c.user2_id ELSE c.user1_id END
+        LEFT JOIN user u ON u.id = CASE WHEN c.user1_id = #{me} THEN c.user2_id ELSE c.user1_id END
+        WHERE c.user1_id = #{me}
+           OR c.user2_id = #{me}
+        ORDER BY c.last_time DESC, c.id DESC
+    </select>
+
+</mapper>

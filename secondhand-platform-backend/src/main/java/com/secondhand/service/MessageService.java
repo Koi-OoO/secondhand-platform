@@ -1,6 +1,7 @@
 package com.secondhand.service;
 
 import com.secondhand.util.Result;
+import java.util.List;
 
 /**
  * 私信服务接口。
@@ -20,6 +21,11 @@ public interface MessageService {
     Result send(Long fromUserId, Long toUserId, String content, Long productId);
 
     /**
+     * 创建或获取「我」与某人的会话；即使还没有消息，也会持久化到会话列表。
+     */
+    Result createOrGetConversation(Long userId, Long peerId, Long productId);
+
+    /**
      * 查询「我」的会话列表：每个对方 + 最后一条消息 + 未读数 + 对方昵称/头像。
      */
     Result getConversations(Long userId);
@@ -33,4 +39,9 @@ public interface MessageService {
      * 查询「我」收到的私信总未读数。
      */
     Result getUnreadCount(Long userId);
+
+    /**
+     * 批量查询用户当前是否有 WebSocket 在线连接。
+     */
+    Result getOnlineStatus(List<Long> userIds);
 }

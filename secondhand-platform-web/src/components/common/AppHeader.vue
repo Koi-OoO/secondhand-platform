@@ -56,6 +56,12 @@
             待收货 {{ displayCount(pendingCount.toConfirm) }}
           </router-link>
 
+          <router-link to="/messages" class="message-alert" :class="{ 'message-alert--active': messageStore.unreadCount > 0 }">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>消息</span>
+            <b v-if="messageStore.unreadCount > 0">{{ displayCount(messageStore.unreadCount) }}</b>
+          </router-link>
+
           <router-link to="/product/publish" class="btn-publish">
             <el-icon><Plus /></el-icon>
             <span>发布闲置</span>
@@ -79,6 +85,11 @@
                 </el-dropdown-item>
                 <el-dropdown-item command="favorites">
                   <el-icon><Star /></el-icon>我的收藏
+                </el-dropdown-item>
+                <el-dropdown-item command="messages">
+                  <el-icon><ChatDotRound /></el-icon>
+                  消息中心
+                  <span v-if="messageStore.unreadCount > 0" class="dropdown-badge">{{ displayCount(messageStore.unreadCount) }}</span>
                 </el-dropdown-item>
                 <el-dropdown-item command="orders">
                   <el-icon><Document /></el-icon>
@@ -106,13 +117,15 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Shop } from '@element-plus/icons-vue'
+import { useMessageStore } from '@/stores/message'
+import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Shop, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getPendingCount } from '@/api/order'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const messageStore = useMessageStore()
 const scrolled = ref(false)
 const headerKeyword = ref('')
 const pendingCount = ref({ toShip: 0, toConfirm: 0 })
@@ -162,6 +175,7 @@ function handleCommand(cmd) {
     case 'home': if (userStore.userInfo?.id) router.push(`/seller/${userStore.userInfo.id}`); break
     case 'profile': router.push('/user/profile'); break
     case 'favorites': router.push('/user/favorites'); break
+    case 'messages': router.push('/messages'); break
     case 'orders': router.push('/user/orders'); break
     case 'logout': userStore.logout(); break
   }
@@ -603,6 +617,53 @@ async function pollPendingCount() {
     &:hover {
       background: $color-yellow;
     }
+  }
+}
+
+.message-alert {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  border: 2px solid $color-ink;
+  border-radius: 999px;
+  background: $color-bg-card;
+  color: $color-text;
+  font-size: 12px;
+  font-weight: $font-weight-heavy;
+  box-shadow: 2px 2px 0 $color-ink;
+  white-space: nowrap;
+  transition: background $transition-fast, transform $transition-fast, box-shadow $transition-fast;
+
+  &:hover {
+    background: $color-yellow;
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 $color-ink;
+  }
+
+  &--active {
+    background: $color-red;
+    color: #fff;
+
+    b {
+      background: #fff;
+      color: $color-red;
+    }
+  }
+
+  b {
+    display: inline-flex;
+    min-width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: $color-yellow;
+    color: $color-ink;
+    font-size: 11px;
+    line-height: 1;
   }
 }
 

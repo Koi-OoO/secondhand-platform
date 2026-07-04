@@ -5,19 +5,21 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.secondhand.entity.Conversation;
 import com.secondhand.entity.Message;
 import com.secondhand.entity.User;
+import com.secondhand.mapper.ConversationMapper;
 import com.secondhand.mapper.MessageMapper;
 import com.secondhand.mapper.UserMapper;
 import com.secondhand.service.MessageService;
 import com.secondhand.util.Result;
 import com.secondhand.websocket.ChatWebSocketHandler;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,11 +28,12 @@ import org.springframework.stereotype.Service;
  * 私信服务实现类。
  */
 @Service  // 标识为Service层组件
-public class
-MessageServiceImpl implements MessageService {
+public class MessageServiceImpl implements MessageService {
 
     @Autowired  // 注入私信Mapper
     private MessageMapper messageMapper;
+    @Autowired  // 注入会话Mapper
+    private ConversationMapper conversationMapper;
     @Autowired  // 注入用户Mapper（查对方昵称/头像、校验接收者存在）
     private UserMapper userMapper;
     @Autowired  // 注入WebSocket处理器，用于实时推送
@@ -68,6 +71,7 @@ MessageServiceImpl implements MessageService {
         msg.setIsRead(false);  // 默认未读
         msg.setCreateTime(new Date());  // 创建时间
         messageMapper.insert(msg);  // 插入（回填自增id）
+        upsertConversationAfterMessage(fromUserId, toUserId, productId, msg);
 
         // 实时推送给接收方（在线才推，离线跳过；统一payload结构 {type,data}）
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -79,55 +83,50 @@ MessageServiceImpl implements MessageService {
     }
 
     /**
+     * 创建或获取会话。
+     */
+    @Override
+    public Result createOrGetConversation(Long userId, Long peerId, Long productId) {
+        if (peerId == null) {
+            return Result.error("请选择联系人");
+        }
+        if (peerId.equals(userId)) {
+            return Result.error("不能给自己发送私信");
+        }
+
+        User peer = userMapper.selectById(peerId);
+        if (peer == null) {
+            return Result.error("联系人不存在");
+        }
+
+        Conversation conversation = findConversation(userId, peerId);
+        if (conversation == null) {
+            conversation = new Conversation();
+            UserPair pair = normalizePair(userId, peerId);
+            Date now = new Date();
+            conversation.setUser1Id(pair.user1Id);
+            conversation.setUser2Id(pair.user2Id);
+            conversation.setProductId(productId);
+            conversation.setLastTime(now);
+            conversation.setCreateTime(now);
+            conversation.setUpdateTime(now);
+            conversationMapper.insert(conversation);
+        } else if (conversation.getProductId() == null && productId != null) {
+            conversation.setProductId(productId);
+            conversation.setUpdateTime(new Date());
+            conversationMapper.updateById(conversation);
+        }
+
+        return Result.success(toConversationItem(conversation, peer, null, 0));
+    }
+
+    /**
      * 查询我的会话列表
      */
     @Override
     public Result getConversations(Long userId) {
-        // 1. 聚合查询会话摘要：对方id、最后消息id、未读数
-        List<Map<String, Object>> summaries = messageMapper.selectConversationSummaries(userId);
-        if (summaries.isEmpty()) {
-            return Result.success(Collections.emptyList());
-        }
-
-        // 2. 收集对方id与最后消息id，便于批量查询
-        List<Long> peerIds = new ArrayList<>();
-        List<Long> lastIds = new ArrayList<>();
-        for (Map<String, Object> s : summaries) {
-            // 聚合结果为Map，数值统一按Number取出再转换
-            peerIds.add(((Number) s.get("peerId")).longValue());
-            lastIds.add(((Number) s.get("lastId")).longValue());
-        }
-        // 批量查最后一条消息：id -> Message
-        Map<Long, Message> lastMsgMap = messageMapper.selectBatchIds(lastIds).stream()
-                .collect(Collectors.toMap(Message::getId, m -> m));
-        // 批量查对方用户：id -> User
-        Map<Long, User> userMap = userMapper.selectBatchIds(peerIds).stream()
-                .collect(Collectors.toMap(User::getId, u -> u));
-
-        // 3. 组装会话列表
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (Map<String, Object> s : summaries) {
-            Long peerId = ((Number) s.get("peerId")).longValue();
-            Long lastId = ((Number) s.get("lastId")).longValue();
-            Number unread = (Number) s.get("unreadCount");
-
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("peerId", peerId);  // 对方用户id
-            // 对方昵称/头像
-            User peer = userMap.get(peerId);
-            item.put("peerNickname", peer != null ? peer.getNickname() : null);
-            item.put("peerAvatar", peer != null ? peer.getAvatar() : null);
-            // 最后一条消息预览
-            Message last = lastMsgMap.get(lastId);
-            if (last != null) {
-                item.put("lastContent", last.getContent());
-                item.put("lastTime", last.getCreateTime());
-            }
-            // 该会话未读数（SUM结果为BigDecimal，统一按Number处理）
-            item.put("unreadCount", unread != null ? unread.intValue() : 0);
-            list.add(item);
-        }
-        return Result.success(list);
+        List<Map<String, Object>> summaries = conversationMapper.selectConversationSummaries(userId);
+        return Result.success(summaries != null ? summaries : Collections.emptyList());
     }
 
     /**
@@ -185,5 +184,92 @@ MessageServiceImpl implements MessageService {
                 .eq(Message::getIsRead, false);
         Long count = messageMapper.selectCount(wrapper);
         return Result.success(count);
+    }
+
+    /**
+     * 批量查询用户在线状态。
+     */
+    @Override
+    public Result getOnlineStatus(List<Long> userIds) {
+        Map<Long, Map<String, Object>> statusMap = new LinkedHashMap<>();
+        if (userIds == null || userIds.isEmpty()) {
+            return Result.success(statusMap);
+        }
+
+        List<Long> ids = userIds.stream()
+                .filter(Objects::nonNull)
+                .filter(id -> id > 0)
+                .distinct()
+                .collect(Collectors.toList());
+        for (Long id : ids) {
+            Map<String, Object> status = new LinkedHashMap<>();
+            status.put("online", chatWebSocketHandler.isOnline(id));
+            status.put("lastActiveTime", chatWebSocketHandler.getLastActiveTime(id));
+            statusMap.put(id, status);
+        }
+        return Result.success(statusMap);
+    }
+
+    private void upsertConversationAfterMessage(Long fromUserId, Long toUserId, Long productId, Message message) {
+        Conversation conversation = findConversation(fromUserId, toUserId);
+        if (conversation == null) {
+            conversation = new Conversation();
+            UserPair pair = normalizePair(fromUserId, toUserId);
+            Date now = new Date();
+            conversation.setUser1Id(pair.user1Id);
+            conversation.setUser2Id(pair.user2Id);
+            conversation.setProductId(productId);
+            conversation.setLastMessageId(message.getId());
+            conversation.setLastTime(message.getCreateTime());
+            conversation.setCreateTime(now);
+            conversation.setUpdateTime(now);
+            conversationMapper.insert(conversation);
+            return;
+        }
+
+        conversation.setLastMessageId(message.getId());
+        conversation.setLastTime(message.getCreateTime());
+        conversation.setUpdateTime(new Date());
+        if (conversation.getProductId() == null && productId != null) {
+            conversation.setProductId(productId);
+        }
+        conversationMapper.updateById(conversation);
+    }
+
+    private Conversation findConversation(Long userId, Long peerId) {
+        UserPair pair = normalizePair(userId, peerId);
+        return conversationMapper.selectByPair(pair.user1Id, pair.user2Id);
+    }
+
+    private UserPair normalizePair(Long userId, Long peerId) {
+        if (userId < peerId) {
+            return new UserPair(userId, peerId);
+        }
+        return new UserPair(peerId, userId);
+    }
+
+    private Map<String, Object> toConversationItem(Conversation conversation, User peer, Message last, int unreadCount) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("conversationId", conversation.getId());
+        item.put("peerId", peer.getId());
+        item.put("peerNickname", peer.getNickname());
+        item.put("peerUsername", peer.getUsername());
+        item.put("peerAvatar", peer.getAvatar());
+        item.put("productId", conversation.getProductId());
+        item.put("lastId", last != null ? last.getId() : conversation.getLastMessageId());
+        item.put("lastContent", last != null ? last.getContent() : null);
+        item.put("lastTime", last != null ? last.getCreateTime() : conversation.getLastTime());
+        item.put("unreadCount", unreadCount);
+        return item;
+    }
+
+    private static class UserPair {
+        private final Long user1Id;
+        private final Long user2Id;
+
+        private UserPair(Long user1Id, Long user2Id) {
+            this.user1Id = user1Id;
+            this.user2Id = user2Id;
+        }
     }
 }
