@@ -41,6 +41,9 @@ public class User implements Serializable {
     @Schema(description = "邮箱", example = "admin@example.com")
     private String email;
 
+    @Schema(description = "邮箱是否已验证：0=未验证，1=已验证", example = "1")
+    private Integer emailVerified;
+
     @Schema(description = "账号状态：0=禁用，1=正常", example = "1", allowableValues = {"0", "1"})
     private Integer status;
 

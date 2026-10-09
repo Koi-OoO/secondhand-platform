@@ -22,6 +22,12 @@ const routes = [
     component: () => import('@/views/auth/RegisterPage.vue'),
     meta: { layout: 'blank', guest: true }
   },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('@/views/auth/ForgotPasswordPage.vue'),
+    meta: { layout: 'blank', guest: true }
+  },
 
   // === 公共页 ===
   {
@@ -84,6 +90,21 @@ const routes = [
         path: 'profile/edit',
         name: 'ProfileEdit',
         component: () => import('@/views/user/ProfileEdit.vue')
+      },
+      {
+        path: 'security',
+        name: 'AccountSecurity',
+        component: () => import('@/views/user/AccountSecurityPage.vue')
+      },
+      {
+        path: 'security/password',
+        name: 'AccountSecurityPassword',
+        component: () => import('@/views/user/PasswordSecurityPage.vue')
+      },
+      {
+        path: 'security/email',
+        name: 'AccountSecurityEmail',
+        component: () => import('@/views/user/EmailSecurityPage.vue')
       },
       {
         path: 'products',

@@ -44,7 +44,7 @@
 
 ## 核心功能
 
-- **用户**:注册登录（基于 Redis 的分布式 Session）、个人资料维护（含校区/学院）、信用分
+- **用户**:注册登录（基于 Redis 的分布式 Session）、账号安全中心、邮箱验证码找回密码、个人资料维护（含校区/学院）、信用分
 - **商品**:发布（多图上传、成色、面交地点）、分类浏览、关键词搜索、详情、上下架、库存管理
 - **订单**:下单（填写面交地点）、发货、确认收货、取消/拒发；完整订单状态机，买卖家各自视角软删除
 - **评价**:订单完成后买家可评价卖家,支持匿名评价,并更新卖家信用分
@@ -159,6 +159,23 @@ mvn spring-boot:run
 
 - 服务地址:http://localhost:8080
 - 接口文档(Knife4j):http://localhost:8080/doc.html
+
+### 邮箱找回密码配置
+
+找回密码使用绑定邮箱发送六位验证码。启动后端前配置 SMTP 环境变量：
+
+```text
+MAIL_HOST=smtp.example.com
+MAIL_PORT=465
+MAIL_USERNAME=your-mail@example.com
+MAIL_PASSWORD=your-smtp-password
+MAIL_SMTP_AUTH=true
+MAIL_SMTP_SSL=true
+```
+
+用户需要在“账号安全”中绑定并验证邮箱。找回流程包含申请验证码、校验验证码、使用一次性凭证重置密码三个接口，验证码有效期为 10 分钟，发送间隔为 60 秒。
+
+注册时邮箱可以留空。登录后进入“账号安全”，通过验证码绑定并验证邮箱；未验证邮箱的账号不能使用自助找回密码。已有数据库需要先执行 `secondhand-platform-backend/src/main/resources/sql/2026-10-08-add-user-email-verified.sql`，新建数据库时 `init.sql` 已包含该字段。
 
 ### 4. 启动前端
 

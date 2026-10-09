@@ -38,10 +38,6 @@
             <el-input v-model="form.phone" placeholder="绑定手机号" maxlength="20" />
           </el-form-item>
 
-          <el-form-item label="邮箱">
-            <el-input v-model="form.email" placeholder="绑定邮箱" maxlength="100" />
-          </el-form-item>
-
           <el-form-item label="性别">
             <el-select v-model="form.gender" placeholder="选择性别" style="width:100%">
               <el-option :value="0" label="未知" />
@@ -96,7 +92,6 @@ const form = reactive({
   nickname: '',
   avatar: '',
   phone: '',
-  email: '',
   gender: 0,
   birthday: '',
   address: '',
@@ -109,7 +104,6 @@ onMounted(() => {
     form.nickname = u.nickname || ''
     form.avatar = u.avatar || ''
     form.phone = u.phone || ''
-    form.email = u.email || ''
     form.gender = u.gender ?? 0
     form.birthday = u.birthday || ''
     form.address = u.address || ''

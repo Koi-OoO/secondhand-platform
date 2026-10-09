@@ -10,6 +10,42 @@ export function login(username, password) {
   return http.post('/user/login', { username, password }, { skipErrorMessage: true })
 }
 
+export function requestPasswordResetCode(username, email) {
+  return http.post('/user/password/forgot/request', { username, email })
+}
+
+export function verifyPasswordResetCode(username, email, code) {
+  return http.post('/user/password/forgot/verify', { username, email, code })
+}
+
+export function resetPassword(resetToken, newPassword) {
+  return http.post('/user/password/reset', { resetToken, newPassword })
+}
+
+export function getSecurityInfo() {
+  return http.get('/user/security')
+}
+
+export function requestEmailBindCode(email) {
+  return http.post('/user/email/bind/request', { email })
+}
+
+export function verifyEmailBindCode(email, code) {
+  return http.post('/user/email/bind/verify', { email, code })
+}
+
+export function requestEmailUnbindCode() {
+  return http.post('/user/email/unbind/request')
+}
+
+export function unbindEmail(code) {
+  return http.post('/user/email/unbind', { code })
+}
+
+export function changePassword(oldPassword, newPassword) {
+  return http.post('/user/password/change', { oldPassword, newPassword })
+}
+
 /**
  * 用户注册
  * @param {object} userData - { username, password, ...optional }

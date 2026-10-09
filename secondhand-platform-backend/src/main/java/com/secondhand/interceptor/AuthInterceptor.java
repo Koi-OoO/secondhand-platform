@@ -28,7 +28,7 @@ public class AuthInterceptor implements Filter {
      * 白名单路径（不需要登录即可访问的接口）
      */
     private static final List<String> EXCLUDE = Arrays.asList(
-            "/user/login", "/user/register", "/user/public/", "/category/list",  // 用户登录注册、分类
+            "/user/login", "/user/register", "/user/password/forgot/", "/user/password/reset", "/user/public/", "/category/list",  // 公开认证、分类
             "/product/page", "/product/detail/", "/product/hot-keywords",  // 商品查询
             "/product/seller/", "/evaluation/user/",  // 卖家商品、评价查询
             "/uploads/", "/error", "/doc.html",  // 静态资源、错误页、Swagger文档

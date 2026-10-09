@@ -5,6 +5,7 @@ import com.secondhand.mapper.UserMapper;
 import com.secondhand.service.UserService;
 import com.secondhand.util.PasswordUtil;
 import com.secondhand.util.Result;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -73,6 +74,19 @@ public class UserServiceImpl implements UserService {
             return Result.error("用户名已存在");
         }
 
+        if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+            String email = user.getEmail().trim().toLowerCase(Locale.ROOT);
+            if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                return Result.error("邮箱格式不正确");
+            }
+            if (userMapper.selectByEmail(email) != null) {
+                return Result.error("邮箱已被绑定");
+            }
+            user.setEmail(email);
+        } else {
+            user.setEmail(null);
+        }
+
         // 注册时统一对密码加密后再落库
         user.setPassword(PasswordUtil.encrypt(user.getPassword()));
 
@@ -86,6 +100,9 @@ public class UserServiceImpl implements UserService {
 
         // 新用户默认设置为启用状态
         user.setStatus(1);
+
+        // 邮箱即使填写，也必须通过账号安全流程验证
+        user.setEmailVerified(0);
 
         // 写入用户数据到数据库
         userMapper.insert(user);

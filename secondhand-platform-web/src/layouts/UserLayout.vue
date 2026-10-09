@@ -22,6 +22,10 @@
               <el-icon><User /></el-icon>
               <span>个人资料</span>
             </router-link>
+            <router-link to="/user/security" class="sidebar-nav__item" active-class="is-active">
+              <el-icon><Lock /></el-icon>
+              <span>账号安全</span>
+            </router-link>
             <router-link to="/user/orders" class="sidebar-nav__item" active-class="is-active">
               <el-icon><Document /></el-icon>
               <span>我的订单</span>
@@ -54,7 +58,7 @@ import { useUserStore } from '@/stores/user'
 import { getPendingCount } from '@/api/order'
 import AppHeader from '@/components/common/AppHeader.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
-import { User, Document, Goods, Star } from '@element-plus/icons-vue'
+import { User, Lock, Document, Goods, Star } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 

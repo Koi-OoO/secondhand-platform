@@ -16,6 +16,10 @@
           </span>
         </div>
         <div class="profile-head__actions">
+          <router-link to="/user/security" class="btn-edit">
+            <el-icon><Lock /></el-icon>
+            账号安全
+          </router-link>
           <router-link :to="`/seller/${userStore.userInfo?.id}`" class="btn-edit">
             <el-icon><Shop /></el-icon>
             我的主页
@@ -26,6 +30,14 @@
           </router-link>
         </div>
       </div>
+    </div>
+
+    <div v-if="!emailVerified" class="security-reminder">
+      <div>
+        <strong>建议绑定并验证邮箱</strong>
+        <span>未验证邮箱时，忘记密码无法自助找回。</span>
+      </div>
+      <router-link to="/user/security/email" class="reminder-link">立即绑定</router-link>
     </div>
 
     <!-- 详细信息 -->
@@ -46,7 +58,12 @@
         </div>
         <div class="detail-item">
           <span class="detail-label">邮箱</span>
-          <span class="detail-value">{{ userStore.userInfo?.email || '未绑定' }}</span>
+          <span class="detail-value">
+            {{ userStore.userInfo?.email || '未绑定' }}
+            <el-tag v-if="userStore.userInfo?.email" :type="emailVerified ? 'success' : 'warning'" size="small">
+              {{ emailVerified ? '已验证' : '待验证' }}
+            </el-tag>
+          </span>
         </div>
         <div class="detail-item">
           <span class="detail-label">性别</span>
@@ -83,7 +100,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Edit, Shop } from '@element-plus/icons-vue'
+import { Edit, Lock, Shop } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { GENDER } from '@/utils/constant'
 import { formatDate, formatDateShort } from '@/utils/format'
@@ -92,6 +109,7 @@ const userStore = useUserStore()
 
 const genderLabel = computed(() => GENDER[userStore.userInfo?.gender] || '未知')
 const birthdayDisplay = computed(() => formatDateShort(userStore.userInfo?.birthday) || '未设置')
+const emailVerified = computed(() => userStore.userInfo?.emailVerified === 1)
 </script>
 
 <style lang="scss" scoped>
@@ -182,6 +200,31 @@ const birthdayDisplay = computed(() => formatDateShort(userStore.userInfo?.birth
   padding: $space-xl;
 }
 
+.security-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-md;
+  padding: $space-md $space-lg;
+  border: 1px solid rgba($color-warning, 0.6);
+  border-radius: $radius-md;
+  background: rgba($color-warning, 0.12);
+
+  strong,
+  span {
+    display: block;
+  }
+
+  strong { color: $color-text; }
+  span { margin-top: 4px; color: $color-text-secondary; font-size: $font-size-sm; }
+}
+
+.reminder-link {
+  flex-shrink: 0;
+  color: $color-primary;
+  font-weight: 700;
+}
+
 .section-title {
   font-size: $font-size-lg;
   font-weight: 600;
@@ -225,5 +268,7 @@ const birthdayDisplay = computed(() => formatDateShort(userStore.userInfo?.birth
   .detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .security-reminder { align-items: flex-start; flex-direction: column; }
 }
 </style>

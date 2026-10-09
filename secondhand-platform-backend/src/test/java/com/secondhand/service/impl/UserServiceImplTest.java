@@ -36,4 +36,27 @@ class UserServiceImplTest {
                 .isNotBlank()
                 .matches(".*\\d{6}");
     }
+
+    @Test
+    void registerStoresProvidedEmailAsUnverified() {
+        UserMapper userMapper = mock(UserMapper.class);
+        when(userMapper.selectByUsername("new_user")).thenReturn(null);
+        when(userMapper.selectByEmail("alice@example.com")).thenReturn(null);
+
+        User user = new User();
+        user.setUsername("new_user");
+        user.setPassword("123456");
+        user.setEmail(" Alice@Example.com ");
+
+        UserServiceImpl service = new UserServiceImpl();
+        ReflectionTestUtils.setField(service, "userMapper", userMapper);
+
+        Result result = service.register(user);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).insert(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("alice@example.com");
+        assertThat(captor.getValue().getEmailVerified()).isZero();
+    }
 }

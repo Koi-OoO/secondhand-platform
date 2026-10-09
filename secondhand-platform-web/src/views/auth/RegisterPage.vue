@@ -75,6 +75,16 @@
             />
           </el-form-item>
 
+          <el-form-item label="邮箱（选填）" prop="email">
+            <el-input
+              v-model="form.email"
+              placeholder="可稍后在账号安全中验证"
+              :prefix-icon="Message"
+              size="large"
+              maxlength="100"
+            />
+          </el-form-item>
+
           <el-form-item label="昵称（选填）" prop="nickname">
             <el-input
               v-model="form.nickname"
@@ -110,7 +120,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { User, Lock, EditPen, CircleCheck } from '@element-plus/icons-vue'
+import { User, Lock, EditPen, Message, CircleCheck } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -121,6 +131,7 @@ const form = reactive({
   username: '',
   password: '',
   confirmPassword: '',
+  email: '',
   nickname: ''
 })
 
@@ -142,6 +153,9 @@ const rules = {
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     { validator: validateConfirmPass, trigger: 'blur' }
+  ],
+  email: [
+    { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
   ]
 }
 

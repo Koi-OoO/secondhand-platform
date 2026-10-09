@@ -15,6 +15,7 @@ CREATE TABLE `user` (
   `avatar` VARCHAR(255) DEFAULT NULL COMMENT 'avatar url',
   `phone` VARCHAR(20) DEFAULT NULL COMMENT 'phone number',
   `email` VARCHAR(100) DEFAULT NULL COMMENT 'email',
+  `email_verified` TINYINT NOT NULL DEFAULT 0 COMMENT 'email verified flag',
   `gender` TINYINT DEFAULT 0 COMMENT 'gender',
   `address` VARCHAR(255) DEFAULT NULL COMMENT 'default address',
   `campus` VARCHAR(100) DEFAULT NULL COMMENT 'campus/college',

@@ -61,6 +61,10 @@
             />
           </el-form-item>
 
+          <div class="forgot-link-row">
+            <router-link to="/forgot-password">忘记密码？</router-link>
+          </div>
+
           <el-form-item>
             <el-button
               type="primary"
@@ -455,6 +459,17 @@ async function handleLogin() {
     &:hover {
       background: linear-gradient(transparent 58%, rgba($color-yellow, 0.7) 58%);
     }
+  }
+}
+
+.forgot-link-row {
+  margin: -8px 0 16px;
+  text-align: right;
+
+  a {
+    color: $color-red-deep;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-heavy;
   }
 }
 
