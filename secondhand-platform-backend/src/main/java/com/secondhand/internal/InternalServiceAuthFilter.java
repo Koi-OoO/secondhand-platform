@@ -13,6 +13,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /** 校验 AI 等内部服务访问令牌。 */
@@ -23,8 +25,13 @@ public class InternalServiceAuthFilter implements Filter {
     private static final String AUTHENTICATED_ATTRIBUTE = "internalServiceAuthenticated";
     private final String internalToken;
 
-    public InternalServiceAuthFilter(AiServiceProperties properties) {
+    @Autowired
+    public InternalServiceAuthFilter(AiServiceProperties properties, Environment environment) {
         this(properties.getInternalToken());
+        if ((environment.acceptsProfiles("prod", "production"))
+                && "dev-ai-internal-token".equals(this.internalToken)) {
+            throw new IllegalStateException("生产环境必须配置 AI_INTERNAL_TOKEN，不能使用默认内部服务令牌");
+        }
     }
 
     public InternalServiceAuthFilter(String internalToken) {

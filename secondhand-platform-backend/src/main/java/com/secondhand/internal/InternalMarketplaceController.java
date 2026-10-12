@@ -30,7 +30,11 @@ public class InternalMarketplaceController {
                          @RequestParam(required = false) Integer conditionLevel,
                          @RequestParam(defaultValue = "latest") String sort) {
         if (page == null || page < 1 || size == null || size < 1 || size > 20
-                || (maxPrice != null && maxPrice.signum() < 0)) {
+                || (categoryId != null && categoryId < 1)
+                || (conditionLevel != null && (conditionLevel < 1 || conditionLevel > 4))
+                || (minPrice != null && minPrice.signum() < 0)
+                || (maxPrice != null && maxPrice.signum() < 0)
+                || (minPrice != null && maxPrice != null && maxPrice.compareTo(minPrice) < 0)) {
             return Result.error("查询参数不合法");
         }
         return productService.pageProductsForAi(page, size, categoryId, keyword,

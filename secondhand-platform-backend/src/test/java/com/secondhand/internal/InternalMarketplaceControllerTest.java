@@ -83,6 +83,30 @@ class InternalMarketplaceControllerTest {
         verifyNoInteractions(productService);
     }
 
+    @ParameterizedTest
+    @CsvSource({"-1,10,1,2", "10,9,1,2"})
+    void rejectsInvalidPricesCategoryAndConditionWithoutCallingService(String minPrice, String maxPrice,
+                                                                         int categoryId, int conditionLevel) throws Exception {
+        mockMvc.perform(get("/internal/marketplace/listings/search")
+                        .param("minPrice", minPrice).param("maxPrice", maxPrice)
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("conditionLevel", String.valueOf(conditionLevel)))
+                .andExpect(status().isOk());
+
+        verifyNoInteractions(productService);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,2", "1,0", "1,5"})
+    void rejectsInvalidCategoryOrConditionWithoutCallingService(int categoryId, int conditionLevel) throws Exception {
+        mockMvc.perform(get("/internal/marketplace/listings/search")
+                        .param("categoryId", String.valueOf(categoryId))
+                        .param("conditionLevel", String.valueOf(conditionLevel)))
+                .andExpect(status().isOk());
+
+        verifyNoInteractions(productService);
+    }
+
     @Test
     void mapsAllSearchFiltersToAiService() throws Exception {
         when(productService.pageProductsForAi(1, 20, 4, "phone", new BigDecimal("10.00"),

@@ -54,7 +54,8 @@ public class AuthInterceptor implements Filter {
 
         // 获取请求的URI
         String uri = httpReq.getRequestURI();
-        if (Boolean.TRUE.equals(httpReq.getAttribute("internalServiceAuthenticated"))) {
+        if (uri.startsWith("/internal/")
+                && Boolean.TRUE.equals(httpReq.getAttribute("internalServiceAuthenticated"))) {
             chain.doFilter(req, res);
             return;
         }
