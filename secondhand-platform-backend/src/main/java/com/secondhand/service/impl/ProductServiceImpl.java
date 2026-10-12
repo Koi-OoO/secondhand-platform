@@ -85,6 +85,30 @@ public class ProductServiceImpl implements ProductService {
                                String keyword, BigDecimal minPrice,
                                BigDecimal maxPrice, Integer conditionLevel,
                                String sort) {
+        return pageProductsInternal(page, size, sellerId, categoryId, keyword,
+                minPrice, maxPrice, conditionLevel, sort, true);
+    }
+
+    /**
+     * 为 AI 查询商品分页结果，不记录热搜词。
+     */
+    @Override
+    public Result pageProductsForAi(Integer page, Integer size, Integer categoryId,
+                                    String keyword, BigDecimal minPrice,
+                                    BigDecimal maxPrice, Integer conditionLevel,
+                                    String sort) {
+        return pageProductsInternal(page, size, null, categoryId, keyword,
+                minPrice, maxPrice, conditionLevel, sort, false);
+    }
+
+    /**
+     * 分页查询商品列表内部实现。
+     */
+    private Result pageProductsInternal(Integer page, Integer size,
+                                        Long sellerId, Integer categoryId,
+                                        String keyword, BigDecimal minPrice,
+                                        BigDecimal maxPrice, Integer conditionLevel,
+                                        String sort, boolean recordHotKeyword) {
         // 分页参数校正：页码默认1
         if (page == null || page < 1) {
             page = 1;
@@ -99,7 +123,7 @@ public class ProductServiceImpl implements ProductService {
         }
 
         // 有搜索关键词时，更新热搜榜（ZSet结构，搜索一次分数+1）
-        if (keyword != null && !keyword.trim().isEmpty()) {
+        if (recordHotKeyword && keyword != null && !keyword.trim().isEmpty()) {
             redisTemplate.opsForZSet().incrementScore(HOT_KEYWORD_KEY, keyword.trim(), 1);
         }
 
@@ -126,6 +150,21 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Result getDetail(Long productId) {
+        return getDetailInternal(productId, true);
+    }
+
+    /**
+     * 为 AI 查询商品详情，不增加浏览量。
+     */
+    @Override
+    public Result getDetailForAi(Long productId) {
+        return getDetailInternal(productId, false);
+    }
+
+    /**
+     * 查询商品详情内部实现。
+     */
+    private Result getDetailInternal(Long productId, boolean recordViewCount) {
         // 商品ID校验
         if (productId == null || productId <= 0) {
             return Result.error("商品 ID 无效");
@@ -136,12 +175,17 @@ public class ProductServiceImpl implements ProductService {
                 this::loadProductDetail,  // 缓存未命中时的回源加载器
                 DETAIL_LOGIC_TTL,
                 DETAIL_PHYSIC_TTL + (long) (Math.random() * DETAIL_TTL_JITTER));
-        // 商品不存在或已删除
-        if (product == null || (product.getStatus() != null && product.getStatus() == 4)) {
+        // 商品不存在、已删除，或 AI 查询时商品不是在售状态
+        boolean invisible = recordViewCount
+                ? (product != null && product.getStatus() != null && product.getStatus() == 4)
+                : (product != null && !Integer.valueOf(1).equals(product.getStatus()));
+        if (product == null || invisible) {
             return Result.error("商品不存在");
         }
         // 增加浏览量（异步，写Redis）
-        incrementViewCount(productId);
+        if (recordViewCount) {
+            incrementViewCount(productId);
+        }
         return Result.success(product);
     }
 

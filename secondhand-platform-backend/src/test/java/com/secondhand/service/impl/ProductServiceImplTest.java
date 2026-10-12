@@ -14,15 +14,19 @@ import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -95,6 +99,7 @@ class ProductServiceImplTest {
     void getDetailReturnsProductWhenCacheUtilResolvesIt() {
         Product product = new Product();
         product.setId(40L);
+        product.setStatus(1);
         when(cacheUtil.<Long, Product>queryWithLogicalExpire(
                 any(), eq(40L), eq(Product.class), any(), anyLong(), anyLong()))
                 .thenReturn(product);
@@ -117,6 +122,103 @@ class ProductServiceImplTest {
         Result result = service.getDetail(40L);
 
         assertThat(result.getCode()).isEqualTo(500);
+    }
+
+    @Test
+    void pageProductsForAiQueriesOnSaleProductsWithoutRecordingHotKeyword() {
+        Page<Product> emptyPage = new Page<>(1, 12);
+        emptyPage.setRecords(Collections.emptyList());
+        when(productMapper.selectPageWithDetails(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(emptyPage);
+        ZSetOperations<String, Object> zSetOperations = mock(ZSetOperations.class);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+
+        Result result = service.pageProductsForAi(1, 12, 3, "switch",
+                new BigDecimal("1"), new BigDecimal("2000"), 2, "latest");
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(productMapper).selectPageWithDetails(
+                any(), isNull(), eq(3), eq("switch"), eq(new BigDecimal("1")),
+                eq(new BigDecimal("2000")), eq(2), eq(1), eq("latest"));
+        verify(zSetOperations, never()).incrementScore(any(), any(), anyDouble());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getDetailForAiReturnsCachedProductWithoutRecordingViewCount() {
+        Product product = new Product();
+        product.setId(40L);
+        product.setStatus(1);
+        when(cacheUtil.<Long, Product>queryWithLogicalExpire(
+                any(), eq(40L), eq(Product.class), any(), anyLong(), anyLong()))
+                .thenReturn(product);
+
+        Result result = service.getDetailForAi(40L);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData()).isSameAs(product);
+        verify(redisTemplate, never()).opsForValue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 4})
+    @SuppressWarnings("unchecked")
+    void getDetailForAiHidesProductsThatAreNotOnSale(int status) {
+        Product product = new Product();
+        product.setId(40L);
+        product.setStatus(status);
+        when(cacheUtil.<Long, Product>queryWithLogicalExpire(
+                any(), eq(40L), eq(Product.class), any(), anyLong(), anyLong()))
+                .thenReturn(product);
+
+        Result result = service.getDetailForAi(40L);
+
+        assertThat(result.getCode()).isEqualTo(500);
+        verify(redisTemplate, never()).opsForValue();
+    }
+
+    @Test
+    void pageProductsForAiLimitsPageSizeTo50() {
+        Page<Product> emptyPage = new Page<>(1, 50);
+        emptyPage.setRecords(Collections.emptyList());
+        when(productMapper.selectPageWithDetails(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(emptyPage);
+
+        service.pageProductsForAi(1, 100, null, null, null, null, null, "latest");
+
+        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        verify(productMapper).selectPageWithDetails(pageCaptor.capture(), any(), any(), any(), any(), any(), any(), any(), any());
+        assertThat(pageCaptor.getValue().getSize()).isEqualTo(50);
+    }
+
+    @Test
+    void pageProductsRecordsHotKeywordForPublicSearch() {
+        Page<Product> emptyPage = new Page<>(1, 12);
+        emptyPage.setRecords(Collections.emptyList());
+        when(productMapper.selectPageWithDetails(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(emptyPage);
+        ZSetOperations<String, Object> zSetOperations = mock(ZSetOperations.class);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
+
+        service.pageProducts(1, 12, null, null, "switch", null, null, null, "latest");
+
+        verify(zSetOperations).incrementScore("hot:keywords", "switch", 1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getDetailRecordsViewCountForPublicDetail() {
+        Product product = new Product();
+        product.setId(40L);
+        when(cacheUtil.<Long, Product>queryWithLogicalExpire(
+                any(), eq(40L), eq(Product.class), any(), anyLong(), anyLong()))
+                .thenReturn(product);
+        ValueOperations<String, Object> ops = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+
+        service.getDetail(40L);
+
+        verify(ops).increment("product:views:40", 1);
     }
 
     @Test
