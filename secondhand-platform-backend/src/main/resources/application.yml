@@ -63,6 +63,8 @@ springdoc:
 
 # 应用自定义配置
 app:
+  ai:
+    internal-token: ${AI_INTERNAL_TOKEN:dev-ai-internal-token}
   oss:
     endpoint: ${ALIYUN_OSS_ENDPOINT:}
     access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
