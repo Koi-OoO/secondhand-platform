@@ -1,4 +1,4 @@
-"""LangChain tools backed by the Java marketplace read APIs."""
+"""基于 Java 商品只读接口的 LangChain 工具。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 try:
     from langchain_core.tools import tool as langchain_tool
-except ImportError:  # pragma: no cover - only used before optional dependencies are installed
+except ImportError:  # 依赖未安装时使用下面的备用工具包装器
     langchain_tool = None
 
 from app.agent.marketplace.schemas import ProductCard, UserContext
@@ -16,7 +16,7 @@ from app.tools.java_client import JavaMarketplaceClient, JavaServiceError
 
 
 class _FallbackTool:
-    """Small async-tool adapter used when LangChain is unavailable in tooling."""
+    """LangChain 不可用时使用的简单异步工具适配器。"""
 
     def __init__(self, function):
         self.function = function
@@ -24,17 +24,17 @@ class _FallbackTool:
         self.description = function.__doc__ or ""
 
     async def ainvoke(self, payload: dict[str, Any]):
-        """Invoke the wrapped coroutine with a LangChain-like interface."""
+        """使用类似 LangChain 的接口调用被包装的协程。"""
         return await self.function(**payload)
 
 
 def _make_tool(function):
-    """Return a LangChain tool or a test-friendly fallback wrapper."""
+    """返回 LangChain 工具；依赖不可用时返回便于测试的备用包装器。"""
     return langchain_tool(function) if langchain_tool is not None else _FallbackTool(function)
 
 
 def _cards_json(cards: list[ProductCard]) -> str:
-    """Serialize trusted Java product cards using API field aliases."""
+    """使用接口字段别名，将来自 Java 的商品卡片序列化为 JSON。"""
     return json.dumps([card.model_dump(by_alias=True) for card in cards], ensure_ascii=False)
 
 
@@ -44,16 +44,16 @@ def build_marketplace_tools(
     trace_id: str,
     execution_context: ExecutionContext,
 ):
-    """Build only the read-only marketplace tools for one Agent run.
+    """为一次 Agent 运行构建只读商品工具。
 
     Args:
-        client: Java client used as the source of product data.
-        user_context: Authenticated user context for the current request.
-        trace_id: Correlation ID shared across service calls.
-        execution_context: Per-run state where the latest cards are stored.
+        client: 作为商品数据来源的 Java 客户端。
+        user_context: 当前请求对应的已登录用户上下文。
+        trace_id: 在多个服务之间传递的链路追踪 ID。
+        execution_context: 保存本次运行最新商品卡片的状态对象。
 
     Returns:
-        The search and detail tools available to the Agent.
+        Agent 可以使用的搜索工具和详情工具。
     """
 
     async def search_listings(
@@ -66,7 +66,7 @@ def build_marketplace_tools(
         page: int = 1,
         size: int = 10,
     ) -> str:
-        """Search visible second-hand listings using live Java data."""
+        """使用 Java 实时数据搜索当前可见的二手商品。"""
         try:
             cards = await client.search_listings(
                 keyword=keyword,
@@ -85,7 +85,7 @@ def build_marketplace_tools(
         return _cards_json(cards)
 
     async def get_listing(product_id: int) -> str:
-        """Get one visible listing using live Java data."""
+        """使用 Java 实时数据查询一个当前可见的商品。"""
         try:
             card = await client.get_listing(product_id)
         except (JavaServiceError, ValueError) as exc:

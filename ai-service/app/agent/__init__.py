@@ -1,1 +1,1 @@
-"""Agent state, tools, and runtime."""
+"""Agent 的状态、工具和运行时模块。"""

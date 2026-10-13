@@ -1,4 +1,4 @@
-"""HTTP routes exposed by the internal marketplace Agent service."""
+"""AI 商品查询 Agent 对外提供的 HTTP 路由。"""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -14,11 +14,10 @@ async def chat(
     request: AgentChatRequest,
     _: None = Depends(require_internal_token),
 ) -> AgentChatResponse:
-    """Run one authenticated, read-only marketplace Agent turn.
+    """执行一次经过鉴权的只读商品查询。
 
-    The dependency validates the Java-to-Python service token before this
-    function is called. Model configuration failures are translated into a
-    stable 503 response so internal details do not reach the caller.
+    依赖项会在进入函数前校验 Java 到 Python 的服务令牌。
+    模型配置失败时统一返回 503，避免把内部异常细节暴露给调用方。
     """
     try:
         result = await run_agent(request)

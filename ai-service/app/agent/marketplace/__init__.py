@@ -1,1 +1,1 @@
-"""Read-only marketplace agent components."""
+"""只读商品查询 Agent 的组件。"""

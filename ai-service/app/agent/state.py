@@ -1,4 +1,4 @@
-"""Request, response, and per-run state models for the Agent."""
+"""Agent 的请求、响应和单次运行状态模型。"""
 
 from dataclasses import dataclass, field
 
@@ -8,7 +8,7 @@ from app.agent.marketplace.schemas import ProductCard, UserContext
 
 
 class AgentChatRequest(BaseModel):
-    """Payload accepted from the Java AI Facade."""
+    """Java AI Facade 发送给 Python 的请求数据。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -19,7 +19,7 @@ class AgentChatRequest(BaseModel):
 
 
 class AgentChatResponse(BaseModel):
-    """Stable response returned to the Java AI Facade."""
+    """返回给 Java AI Facade 的稳定响应结构。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -31,7 +31,7 @@ class AgentChatResponse(BaseModel):
 
 @dataclass
 class ExecutionContext:
-    """Mutable state shared by tools during one Agent invocation."""
+    """一次 Agent 调用期间由多个工具共享的可变状态。"""
 
     latest_items: list["ProductCard"] = field(default_factory=list)
 

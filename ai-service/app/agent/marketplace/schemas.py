@@ -1,10 +1,10 @@
-"""Pydantic models shared by marketplace tools and Agent state."""
+"""商品工具和 Agent 状态共享的 Pydantic 数据模型。"""
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class UserContext(BaseModel):
-    """Authenticated user context forwarded from the Java Session layer."""
+    """由 Java Session 层传入的已登录用户上下文。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -14,7 +14,7 @@ class UserContext(BaseModel):
 
 
 class ProductCard(BaseModel):
-    """Safe product fields that the Agent may show to the user."""
+    """允许 Agent 展示给用户的安全商品字段。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -28,13 +28,13 @@ class ProductCard(BaseModel):
 
 
 class ProductDetail(ProductCard):
-    """Product detail shape returned by the Java detail endpoint."""
+    """Java 商品详情接口返回的商品详情数据结构。"""
 
     pass
 
 
 class SearchListingsParams(BaseModel):
-    """Validated filters accepted by the read-only search tool."""
+    """只读商品搜索工具接受的、经过校验的筛选条件。"""
 
     keyword: str | None = None
     category_id: int | None = Field(default=None, ge=1)
@@ -47,7 +47,7 @@ class SearchListingsParams(BaseModel):
 
     @model_validator(mode="after")
     def validate_price_range(self) -> "SearchListingsParams":
-        """Reject an inverted price range before making an HTTP request."""
+        """在发起 HTTP 请求前拒绝反向价格区间。"""
         if self.min_price is not None and self.max_price is not None and self.max_price < self.min_price:
             raise ValueError("max_price must be greater than or equal to min_price")
         return self

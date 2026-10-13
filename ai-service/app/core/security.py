@@ -1,4 +1,4 @@
-"""Authentication helpers for service-to-service requests."""
+"""服务间请求的鉴权辅助函数。"""
 
 import secrets
 
@@ -10,10 +10,10 @@ from app.core.config import settings
 async def require_internal_token(
     token: str | None = Header(default=None, alias="X-Internal-Service-Token"),
 ) -> None:
-    """Require the shared Java/Python internal service token.
+    """校验 Java 与 Python 之间共享的内部服务令牌。
 
-    ``compare_digest`` keeps the comparison constant-time enough for this
-    boundary and the dependency raises HTTP 401 before the Agent is invoked.
+    ``compare_digest`` 用于进行相对安全的令牌比较；校验失败时会在
+    Agent 执行前直接返回 HTTP 401。
     """
     expected = settings.internal_token
     if not token or not expected or not secrets.compare_digest(token, expected):

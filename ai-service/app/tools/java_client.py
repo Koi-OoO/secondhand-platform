@@ -1,4 +1,4 @@
-"""Async HTTP client for the Java marketplace internal APIs."""
+"""调用 Java 商品内部接口的异步 HTTP 客户端。"""
 
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ from app.core.config import settings
 
 
 class JavaServiceError(RuntimeError):
-    """A stable, user-safe error from the Java marketplace service."""
+    """Java 商品服务发生异常时使用的稳定、安全错误。"""
 
 
 class JavaMarketplaceClient:
-    """Query visible products from Java without accessing its database directly."""
+    """通过 Java 查询可见商品，不直接访问 Java 数据库。"""
 
     def __init__(
         self,
@@ -33,7 +33,7 @@ class JavaMarketplaceClient:
         self._http_client = http_client
 
     def _headers(self) -> dict[str, str]:
-        """Build service-authentication, tracing, and user-context headers."""
+        """构造服务鉴权、链路追踪和用户上下文请求头。"""
         headers = {
             "X-Internal-Service-Token": self.internal_token,
             "X-Trace-Id": self.trace_id,
@@ -45,7 +45,7 @@ class JavaMarketplaceClient:
         return headers
 
     async def _request(self, method: str, path: str, params: dict[str, Any] | None = None) -> Any:
-        """Make one Java request and unwrap its unified ``Result`` envelope."""
+        """发起一次 Java 请求，并拆出统一的 ``Result`` 响应数据。"""
         url = f"{self.base_url}{path}"
         try:
             if self._http_client is not None:
@@ -74,7 +74,7 @@ class JavaMarketplaceClient:
 
     @staticmethod
     def _card(raw: dict[str, Any]) -> ProductCard:
-        """Convert Java product JSON into the public Agent card shape."""
+        """将 Java 商品 JSON 转换为 Agent 对外使用的商品卡片结构。"""
         product_id = raw.get("productId", raw.get("id"))
         if product_id is None:
             raise JavaServiceError("商品数据缺少商品 ID")
@@ -99,11 +99,11 @@ class JavaMarketplaceClient:
         page: int = 1,
         size: int = 10,
     ) -> list[ProductCard]:
-        """Search visible listings with validated, bounded filters.
+        """使用经过校验且有边界限制的筛选条件搜索在售商品。
 
         Raises:
-            ValueError: If a filter violates the search bounds.
-            JavaServiceError: If Java returns an HTTP or business error.
+            ValueError: 筛选条件超出允许范围时抛出。
+            JavaServiceError: Java 返回 HTTP 错误或业务错误时抛出。
         """
         query = SearchListingsParams(
             keyword=keyword,
@@ -137,7 +137,7 @@ class JavaMarketplaceClient:
         return [self._card(record) for record in records]
 
     async def get_listing(self, product_id: int) -> ProductDetail | None:
-        """Fetch one visible listing by positive product ID."""
+        """根据正整数商品 ID 查询一个在售商品详情。"""
         if product_id < 1:
             raise ValueError("product_id must be positive")
         data = await self._request("GET", f"/internal/marketplace/listings/{product_id}")

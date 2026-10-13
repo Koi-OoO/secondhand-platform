@@ -1,1 +1,1 @@
-"""External service clients used by the agent."""
+"""Agent 使用的外部服务客户端。"""

@@ -1,4 +1,4 @@
-"""Agent factory and one-turn execution flow for marketplace queries."""
+"""商品查询 Agent 的创建工厂和单轮执行流程。"""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ from app.tools.java_client import JavaMarketplaceClient, JavaServiceError
 
 
 class AgentUnavailableError(RuntimeError):
-    """Raised when the configured model or its runtime dependencies are unavailable."""
+    """模型配置缺失或运行依赖不可用时抛出的异常。"""
 
 
 class AgentRunResult(BaseModel):
-    """Internal result normalized before the FastAPI response model."""
+    """在转换为 FastAPI 响应模型前使用的内部结果结构。"""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -34,12 +34,12 @@ WRITE_INTENT_MARKERS = ("下单", "购买", "付款", "发布商品", "修改商
 
 
 def _is_write_request(message: str) -> bool:
-    """Return whether a request asks for a currently unsupported write action."""
+    """判断用户是否提出了当前不支持的写操作请求。"""
     return any(marker in message for marker in WRITE_INTENT_MARKERS)
 
 
 def _content_text(message: Any) -> str:
-    """Extract plain text from a LangChain message or message dictionary."""
+    """从 LangChain 消息对象或消息字典中提取纯文本。"""
     content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
     if isinstance(content, str):
         return content
@@ -51,7 +51,7 @@ def _content_text(message: Any) -> str:
 
 
 def _extract_answer(result: Any) -> str:
-    """Extract the final assistant text from a LangGraph result object."""
+    """从 LangGraph 运行结果中提取最后一条助手文本。"""
     if isinstance(result, dict):
         messages = result.get("messages") or []
         if messages:
@@ -61,11 +61,10 @@ def _extract_answer(result: Any) -> str:
 
 
 def create_marketplace_agent(tools, model_name: str | None = None):
-    """Create the production LangChain Agent with only marketplace tools.
+    """创建只包含商品工具的生产环境 LangChain Agent。
 
     Raises:
-        AgentUnavailableError: If the model name or LangChain OpenAI adapter
-            is not configured.
+        AgentUnavailableError: 未配置模型名称或 LangChain OpenAI 适配器时抛出。
     """
     model_name = model_name or settings.model_name
     if not model_name:
@@ -73,7 +72,7 @@ def create_marketplace_agent(tools, model_name: str | None = None):
     try:
         from langchain.agents import create_agent
         from langchain_openai import ChatOpenAI
-    except ImportError as exc:  # pragma: no cover - depends on runtime installation
+    except ImportError as exc:  # 运行环境未安装 LangChain OpenAI 适配器
         raise AgentUnavailableError("AI 运行依赖未安装") from exc
 
     model = ChatOpenAI(model=model_name, api_key=settings.openai_api_key)
@@ -86,10 +85,9 @@ async def run_agent(
     agent_factory: Callable[[list[Any]], Any] | None = None,
     model_name: str | None = None,
 ) -> AgentRunResult:
-    """Execute one request and return an answer plus trusted product cards.
+    """执行一次请求，并返回回答和可信的商品卡片。
 
-    ``agent_factory`` is injectable so tests can exercise the orchestration
-    without making a real model request.
+    ``agent_factory`` 可以注入测试替身，使测试无需调用真实模型。
     """
     if _is_write_request(request.message):
         return AgentRunResult(

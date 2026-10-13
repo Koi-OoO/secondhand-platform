@@ -1,1 +1,1 @@
-"""Application configuration package."""
+"""应用配置和安全模块包。"""
