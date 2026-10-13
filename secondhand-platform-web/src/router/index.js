@@ -70,6 +70,12 @@ const routes = [
     component: () => import('@/views/message/MessageCenterPage.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
+  {
+    path: '/ai',
+    name: 'AiChat',
+    component: () => import('@/views/ai/AiChatPage.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
 
   // === 用户中心（需登录） ===
   {

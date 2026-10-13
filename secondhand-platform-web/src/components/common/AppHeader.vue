@@ -22,6 +22,9 @@
       <nav class="app-header__nav" aria-label="主导航">
         <router-link to="/" class="nav-link" active-class="active">首页</router-link>
         <router-link to="/products" class="nav-link" active-class="active">商品广场</router-link>
+        <router-link to="/ai" class="nav-link nav-link--ai" active-class="active">
+          <span aria-hidden="true">✦</span> AI 助手
+        </router-link>
       </nav>
 
       <form class="header-search" role="search" @submit.prevent="handleHeaderSearch">
@@ -438,6 +441,17 @@ async function pollPendingCount() {
     border-color: $color-ink;
     background: $color-yellow;
     box-shadow: 2px 2px 0 $color-ink;
+  }
+
+  &--ai {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+
+    > span {
+      color: $color-red;
+      font-size: 13px;
+    }
   }
 }
 
