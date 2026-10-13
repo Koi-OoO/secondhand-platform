@@ -1,3 +1,5 @@
+"""Async HTTP client for the Java marketplace internal APIs."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -14,6 +16,8 @@ class JavaServiceError(RuntimeError):
 
 
 class JavaMarketplaceClient:
+    """Query visible products from Java without accessing its database directly."""
+
     def __init__(
         self,
         base_url: str | None = None,
@@ -29,6 +33,7 @@ class JavaMarketplaceClient:
         self._http_client = http_client
 
     def _headers(self) -> dict[str, str]:
+        """Build service-authentication, tracing, and user-context headers."""
         headers = {
             "X-Internal-Service-Token": self.internal_token,
             "X-Trace-Id": self.trace_id,
@@ -40,6 +45,7 @@ class JavaMarketplaceClient:
         return headers
 
     async def _request(self, method: str, path: str, params: dict[str, Any] | None = None) -> Any:
+        """Make one Java request and unwrap its unified ``Result`` envelope."""
         url = f"{self.base_url}{path}"
         try:
             if self._http_client is not None:
@@ -68,6 +74,7 @@ class JavaMarketplaceClient:
 
     @staticmethod
     def _card(raw: dict[str, Any]) -> ProductCard:
+        """Convert Java product JSON into the public Agent card shape."""
         product_id = raw.get("productId", raw.get("id"))
         if product_id is None:
             raise JavaServiceError("商品数据缺少商品 ID")
@@ -92,6 +99,12 @@ class JavaMarketplaceClient:
         page: int = 1,
         size: int = 10,
     ) -> list[ProductCard]:
+        """Search visible listings with validated, bounded filters.
+
+        Raises:
+            ValueError: If a filter violates the search bounds.
+            JavaServiceError: If Java returns an HTTP or business error.
+        """
         query = SearchListingsParams(
             keyword=keyword,
             category_id=category_id,
@@ -124,6 +137,7 @@ class JavaMarketplaceClient:
         return [self._card(record) for record in records]
 
     async def get_listing(self, product_id: int) -> ProductDetail | None:
+        """Fetch one visible listing by positive product ID."""
         if product_id < 1:
             raise ValueError("product_id must be positive")
         data = await self._request("GET", f"/internal/marketplace/listings/{product_id}")

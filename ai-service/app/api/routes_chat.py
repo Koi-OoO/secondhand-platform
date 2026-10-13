@@ -1,3 +1,5 @@
+"""HTTP routes exposed by the internal marketplace Agent service."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.agent.runtime import AgentUnavailableError, run_agent
@@ -12,6 +14,12 @@ async def chat(
     request: AgentChatRequest,
     _: None = Depends(require_internal_token),
 ) -> AgentChatResponse:
+    """Run one authenticated, read-only marketplace Agent turn.
+
+    The dependency validates the Java-to-Python service token before this
+    function is called. Model configuration failures are translated into a
+    stable 503 response so internal details do not reach the caller.
+    """
     try:
         result = await run_agent(request)
     except AgentUnavailableError as exc:

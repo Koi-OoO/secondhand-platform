@@ -1,3 +1,5 @@
+"""Agent factory and one-turn execution flow for marketplace queries."""
+
 from __future__ import annotations
 
 import inspect
@@ -14,10 +16,12 @@ from app.tools.java_client import JavaMarketplaceClient, JavaServiceError
 
 
 class AgentUnavailableError(RuntimeError):
-    """Raised when the configured model cannot be used."""
+    """Raised when the configured model or its runtime dependencies are unavailable."""
 
 
 class AgentRunResult(BaseModel):
+    """Internal result normalized before the FastAPI response model."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     conversation_id: str | None = Field(default=None, alias="conversationId")
@@ -30,10 +34,12 @@ WRITE_INTENT_MARKERS = ("下单", "购买", "付款", "发布商品", "修改商
 
 
 def _is_write_request(message: str) -> bool:
+    """Return whether a request asks for a currently unsupported write action."""
     return any(marker in message for marker in WRITE_INTENT_MARKERS)
 
 
 def _content_text(message: Any) -> str:
+    """Extract plain text from a LangChain message or message dictionary."""
     content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
     if isinstance(content, str):
         return content
@@ -45,6 +51,7 @@ def _content_text(message: Any) -> str:
 
 
 def _extract_answer(result: Any) -> str:
+    """Extract the final assistant text from a LangGraph result object."""
     if isinstance(result, dict):
         messages = result.get("messages") or []
         if messages:
@@ -54,6 +61,12 @@ def _extract_answer(result: Any) -> str:
 
 
 def create_marketplace_agent(tools, model_name: str | None = None):
+    """Create the production LangChain Agent with only marketplace tools.
+
+    Raises:
+        AgentUnavailableError: If the model name or LangChain OpenAI adapter
+            is not configured.
+    """
     model_name = model_name or settings.model_name
     if not model_name:
         raise AgentUnavailableError("AI 模型未配置")
@@ -73,6 +86,11 @@ async def run_agent(
     agent_factory: Callable[[list[Any]], Any] | None = None,
     model_name: str | None = None,
 ) -> AgentRunResult:
+    """Execute one request and return an answer plus trusted product cards.
+
+    ``agent_factory`` is injectable so tests can exercise the orchestration
+    without making a real model request.
+    """
     if _is_write_request(request.message):
         return AgentRunResult(
             conversationId=request.conversation_id,

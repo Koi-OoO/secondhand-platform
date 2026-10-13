@@ -1,3 +1,5 @@
+"""LangChain tools backed by the Java marketplace read APIs."""
+
 from __future__ import annotations
 
 import json
@@ -14,20 +16,25 @@ from app.tools.java_client import JavaMarketplaceClient, JavaServiceError
 
 
 class _FallbackTool:
+    """Small async-tool adapter used when LangChain is unavailable in tooling."""
+
     def __init__(self, function):
         self.function = function
         self.name = function.__name__
         self.description = function.__doc__ or ""
 
     async def ainvoke(self, payload: dict[str, Any]):
+        """Invoke the wrapped coroutine with a LangChain-like interface."""
         return await self.function(**payload)
 
 
 def _make_tool(function):
+    """Return a LangChain tool or a test-friendly fallback wrapper."""
     return langchain_tool(function) if langchain_tool is not None else _FallbackTool(function)
 
 
 def _cards_json(cards: list[ProductCard]) -> str:
+    """Serialize trusted Java product cards using API field aliases."""
     return json.dumps([card.model_dump(by_alias=True) for card in cards], ensure_ascii=False)
 
 
@@ -37,7 +44,17 @@ def build_marketplace_tools(
     trace_id: str,
     execution_context: ExecutionContext,
 ):
-    """Build only the read-only marketplace tools for one agent run."""
+    """Build only the read-only marketplace tools for one Agent run.
+
+    Args:
+        client: Java client used as the source of product data.
+        user_context: Authenticated user context for the current request.
+        trace_id: Correlation ID shared across service calls.
+        execution_context: Per-run state where the latest cards are stored.
+
+    Returns:
+        The search and detail tools available to the Agent.
+    """
 
     async def search_listings(
         keyword: str | None = None,

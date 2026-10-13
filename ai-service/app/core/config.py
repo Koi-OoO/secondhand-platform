@@ -1,9 +1,11 @@
+"""Typed runtime configuration loaded from environment variables or ``.env``."""
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration loaded from environment variables or .env."""
+    """Configuration shared by the FastAPI app, Agent, and Java client."""
 
     app_name: str = "ai-service"
     app_env: str = "development"
@@ -24,6 +26,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_production_token(self) -> "Settings":
+        """Prevent the development token from being used in production."""
         if self.app_env.lower() in {"prod", "production"} and (
             not self.internal_token or self.internal_token == "dev-ai-internal-token"
         ):

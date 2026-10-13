@@ -1,3 +1,7 @@
+"""System prompt defining the marketplace Agent's read-only boundary."""
+
+# Keep the safety and data-provenance rules in one prompt so every production
+# Agent run receives the same constraints.
 MARKETPLACE_SYSTEM_PROMPT = """
 你是校园二手交易查询助手。你只能使用 marketplace.search_listings 和
 marketplace.get_listing 两个只读工具。商品价格、库存、成色、面交地点和链接
