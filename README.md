@@ -7,10 +7,13 @@
 ![Vue](https://img.shields.io/badge/Vue-3.4-42b883)
 ![MyBatis-Plus](https://img.shields.io/badge/MyBatis--Plus-3.5-blue)
 ![Redis](https://img.shields.io/badge/Redis-Session%20%26%20Lock-red)
+![AI](https://img.shields.io/badge/AI-FastAPI%20%2B%20LangChain-orange)
 
 ## 项目简介
 
 本项目面向校园二手交易场景，实现了从学生注册登录、拍照发布闲置、浏览搜索、下单约定面交到交易互评的完整业务闭环。后端采用经典的 Controller-Service-Mapper 分层架构，引入 Redis 分布式 Session 与 Redisson 分布式锁解决会话共享和并发超卖问题；前端为 Vue 3 单页应用，基于 Element Plus 构建。
+
+项目还包含一个只读的 AI 商品查询模块：浏览器访问 Java 的 `/api/ai/chat`，Java 负责 Session 用户上下文和服务间令牌，Python FastAPI/LangChain Agent 通过受控 Java 内部接口查询在售商品。AI 阶段不执行下单、发布、修改或删除操作，后续校园墙、论坛和活动模块可以复用这条 Java Facade 与 Python Agent 边界。
 
 ## 技术栈
 
@@ -42,6 +45,15 @@
 | Axios | 1.6 | HTTP 客户端 |
 | Sass | 1.77 | CSS 预处理 |
 
+### AI 服务(ai-service)
+
+| 技术 | 说明 |
+| --- | --- |
+| FastAPI | 内部 Agent HTTP 接口和令牌校验 |
+| LangChain / LangGraph | Agent 工具编排和运行时扩展点 |
+| httpx | 异步调用 Java 商品查询接口 |
+| Pydantic | 请求、响应和商品卡片模型 |
+
 ## 核心功能
 
 - **用户**:注册登录（基于 Redis 的分布式 Session）、账号安全中心、邮箱验证码找回密码、个人资料维护（含校区/学院）、信用分
@@ -64,6 +76,7 @@
 - **接口文档**:集成 Knife4j(OpenAPI 3),启动后可在线调试。
 - **测试覆盖**:Service / Controller / Config / Interceptor / 工具类均有单元测试。
 - **前端工程化**:Element Plus 按需引入、第三方库分包(vendor 拆分)、生产构建 gzip 压缩。
+- **AI 只读查询**:LangChain Agent 只能调用商品搜索和详情工具，商品价格、库存、成色和面交地点都来自 Java 查询结果；服务令牌、超时和 trace ID 跨 Java/Python 传递。
 
 ## 项目结构
 
@@ -85,6 +98,10 @@ my-project/
 │           ├── mapper/              # MyBatis XML
 │           ├── sql/                 # 建表与迁移脚本
 │           └── application.yml      # 主配置(application-local.yml 放本地密钥,不提交)
+├── ai-service/                       # Python 商品查询 Agent
+│   ├── app/agent/                    # 状态、工具、提示词和运行时
+│   ├── app/tools/                    # Java 商品 HTTP 客户端
+│   └── tests/                        # 安全、客户端、工具和 Agent 测试
 │
 └── secondhand-platform-web/         # 前端(Vue 3 + Vite)
     └── src/
@@ -160,6 +177,31 @@ mvn spring-boot:run
 - 服务地址:http://localhost:8080
 - 接口文档(Knife4j):http://localhost:8080/doc.html
 
+### 4. 启动 AI 服务
+
+AI 服务启动前，将 Python 的 `INTERNAL_TOKEN` 配置成与 Java 的 `AI_INTERNAL_TOKEN` 相同的值；真实模型密钥只通过环境变量提供：
+
+```bash
+cd ai-service
+python -m pip install -e ".[dev]"
+set INTERNAL_TOKEN=dev-ai-internal-token
+set MODEL_NAME=gpt-4o-mini
+set OPENAI_API_KEY=<你的模型密钥>
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+Linux/macOS 将 `set` 替换为 `export`。未配置 `MODEL_NAME` 时，服务仍可启动和通过健康检查，但聊天接口会返回稳定的 503 提示。
+
+### 5. 启动前端
+
+```bash
+cd secondhand-platform-web
+npm install
+npm run dev
+```
+
+访问 http://localhost:5173 即可。前端已配置开发代理,将 `/api` 转发到后端 `localhost:8080`。
+
 ### 邮箱找回密码配置
 
 找回密码使用绑定邮箱发送六位验证码。启动后端前配置 SMTP 环境变量：
@@ -176,16 +218,6 @@ MAIL_SMTP_SSL=true
 用户需要在“账号安全”中绑定并验证邮箱。找回流程包含申请验证码、校验验证码、使用一次性凭证重置密码三个接口，验证码有效期为 10 分钟，发送间隔为 60 秒。
 
 注册时邮箱可以留空。登录后进入“账号安全”，通过验证码绑定并验证邮箱；未验证邮箱的账号不能使用自助找回密码。已有数据库需要先执行 `secondhand-platform-backend/src/main/resources/sql/2026-10-08-add-user-email-verified.sql`，新建数据库时 `init.sql` 已包含该字段。
-
-### 4. 启动前端
-
-```bash
-cd secondhand-platform-web
-npm install
-npm run dev
-```
-
-访问 http://localhost:5173 即可。前端已配置开发代理,将 `/api` 转发到后端 `localhost:8080`。
 
 ## 界面预览
 
