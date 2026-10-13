@@ -72,6 +72,27 @@ class InternalServiceAuthFilterTest {
     }
 
     @Test
+    void springConstructorRejectsBlankTokenInProduction() {
+        com.secondhand.ai.AiServiceProperties properties = new com.secondhand.ai.AiServiceProperties();
+        properties.setInternalToken("  ");
+        MockEnvironment environment = new MockEnvironment();
+        environment.setActiveProfiles("prod");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> new InternalServiceAuthFilter(properties, environment))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("AI_INTERNAL_TOKEN");
+    }
+
+    @Test
+    void directBlankTokenCannotAuthorizeInternalRequest() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> new InternalServiceAuthFilter(" "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("令牌");
+    }
+
+    @Test
     void springConstructorAcceptsConfiguredTokenInProduction() {
         com.secondhand.ai.AiServiceProperties properties = new com.secondhand.ai.AiServiceProperties();
         properties.setInternalToken("configured-secret");

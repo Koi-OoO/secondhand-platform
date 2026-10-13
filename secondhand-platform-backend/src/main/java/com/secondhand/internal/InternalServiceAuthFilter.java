@@ -27,15 +27,20 @@ public class InternalServiceAuthFilter implements Filter {
 
     @Autowired
     public InternalServiceAuthFilter(AiServiceProperties properties, Environment environment) {
-        this(properties.getInternalToken());
-        if ((environment.acceptsProfiles("prod", "production"))
-                && "dev-ai-internal-token".equals(this.internalToken)) {
+        String configuredToken = properties.getInternalToken();
+        this.internalToken = configuredToken == null ? "" : configuredToken;
+        if (environment.acceptsProfiles("prod", "production")
+                && (this.internalToken.isBlank()
+                || "dev-ai-internal-token".equals(this.internalToken))) {
             throw new IllegalStateException("生产环境必须配置 AI_INTERNAL_TOKEN，不能使用默认内部服务令牌");
         }
     }
 
     public InternalServiceAuthFilter(String internalToken) {
-        this.internalToken = internalToken == null ? "" : internalToken;
+        if (internalToken == null || internalToken.isBlank()) {
+            throw new IllegalArgumentException("内部服务令牌不能为空");
+        }
+        this.internalToken = internalToken;
     }
 
     @Override
