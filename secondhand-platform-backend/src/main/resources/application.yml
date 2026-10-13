@@ -64,7 +64,10 @@ springdoc:
 # 应用自定义配置
 app:
   ai:
+    base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
     internal-token: ${AI_INTERNAL_TOKEN:dev-ai-internal-token}
+    connect-timeout-ms: ${AI_CONNECT_TIMEOUT_MS:1000}
+    read-timeout-ms: ${AI_READ_TIMEOUT_MS:30000}
   oss:
     endpoint: ${ALIYUN_OSS_ENDPOINT:}
     access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
