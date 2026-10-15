@@ -10,7 +10,7 @@ try:
 except ImportError:  # 依赖未安装时使用下面的备用工具包装器
     langchain_tool = None
 
-from app.agent.marketplace.schemas import ProductCard, UserContext
+from app.agent.marketplace.schemas import ProductCard, SearchFilters, SearchListingsParams, UserContext
 from app.agent.state import ExecutionContext
 from app.tools.java_client import JavaMarketplaceClient, JavaServiceError
 
@@ -68,7 +68,8 @@ def build_marketplace_tools(
     ) -> str:
         """使用 Java 实时数据搜索当前可见的二手商品。"""
         try:
-            cards = await client.search_listings(
+            # 在工具边界校验参数；记录与发往Java完全一致的条件。
+            query = SearchListingsParams(
                 keyword=keyword,
                 category_id=category_id,
                 min_price=min_price,
@@ -78,10 +79,15 @@ def build_marketplace_tools(
                 page=page,
                 size=size,
             )
+            cards = await client.search_listings(**query.model_dump())
         except (JavaServiceError, ValueError) as exc:
             execution_context.latest_items = []
+            execution_context.latest_search_filters = None
             return json.dumps({"error": str(exc), "items": []}, ensure_ascii=False)
         execution_context.latest_items = cards
+        execution_context.latest_search_filters = SearchFilters.model_validate(
+            query.model_dump(exclude={"page", "size"})
+        )
         return _cards_json(cards)
 
     async def get_listing(product_id: int) -> str:
@@ -90,6 +96,7 @@ def build_marketplace_tools(
             card = await client.get_listing(product_id)
         except (JavaServiceError, ValueError) as exc:
             execution_context.latest_items = []
+            execution_context.latest_search_filters = None
             return json.dumps({"error": str(exc), "items": []}, ensure_ascii=False)
         execution_context.latest_items = [card] if card else []
         return _cards_json(execution_context.latest_items)

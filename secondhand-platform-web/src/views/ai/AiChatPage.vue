@@ -13,6 +13,11 @@
         </div>
       </header>
 
+      <div class="ai-session-bar">
+        <span>当前账号的对话保存在本浏览器</span>
+        <button type="button" class="ai-new-chat" @click="startNewConversation"><span aria-hidden="true">＋</span> 新对话</button>
+      </div>
+
       <section ref="messageBody" class="ai-messages" aria-live="polite" aria-label="AI 对话记录">
         <article
           v-for="message in messages"
@@ -34,7 +39,19 @@
                 class="ai-product"
                 @click="openProduct(item)"
               >
-                <span class="ai-product__index">{{ String(item.productId).padStart(2, '0') }}</span>
+                <span class="ai-product__cover">
+                  <img
+                    v-if="item.coverUrl && !failedCovers.has(item.coverUrl)"
+                    :src="item.coverUrl"
+                    :alt="item.title || `商品 #${item.productId}`"
+                    loading="lazy"
+                    @error="failedCovers.add(item.coverUrl)"
+                  />
+                  <span v-else class="ai-product__placeholder">
+                    <b>{{ String(item.productId).padStart(2, '0') }}</b>
+                    <small>暂无图片</small>
+                  </span>
+                </span>
                 <span class="ai-product__body">
                   <strong>{{ item.title || `商品 #${item.productId}` }}</strong>
                   <span class="ai-product__meta">
@@ -47,6 +64,12 @@
                 <span class="ai-product__arrow" aria-hidden="true">↗</span>
               </button>
             </div>
+
+            <router-link
+              v-if="message.role === 'assistant' && message.searchFilters"
+              :to="buildProductSearchRoute(message.searchFilters)"
+              class="ai-more-products"
+            >查看更多符合条件的商品 <span aria-hidden="true">↗</span></router-link>
           </div>
         </article>
 
@@ -100,73 +123,52 @@
 </template>
 
 <script setup>
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, reactive, toRefs, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { chatWithAi } from '@/api/ai'
-import { normalizeAiResponse } from '@/utils/ai'
+import { buildProductSearchRoute, getAiErrorMessage } from '@/utils/ai'
+import { createAiChatSession } from '@/utils/aiChatSession'
 import { CONDITION } from '@/utils/constant'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const messageBody = ref(null)
-const draft = ref('')
-const sending = ref(false)
-const errorMessage = ref('')
-const conversationId = ref(null)
-const failedMessageId = ref(null)
-let messageSequence = 0
+const failedCovers = ref(new Set())
+const state = reactive({})
+const session = createAiChatSession({
+  state,
+  userId: userStore.userInfo?.id,
+  storage: () => window.localStorage,
+  request: chatWithAi,
+  formatError: getErrorMessage
+})
+const { draft, sending, errorMessage, messages } = toRefs(state)
 
 const suggestions = ['300 元以内的台灯', '适合宿舍的显示器', '几乎全新的教材']
-const messages = ref([
-  {
-    id: 'welcome',
-    role: 'assistant',
-    content: '你好！我可以帮你查找在售闲置商品。告诉我预算、品类或成色，就从市场里开始找。'
-  }
-])
 
-function createMessageId() {
-  messageSequence += 1
-  return `${Date.now()}-${messageSequence}`
-}
+// 登录账号变化时同步恢复独立缓存，不等待旧账号的请求返回。
+watch(() => userStore.userInfo?.id, id => {
+  session.setUser(id)
+  failedCovers.value.clear()
+  scrollToBottom()
+}, { flush: 'sync' })
+
+// 草稿实时保存，刷新或离开页面时仍能继续编辑。
+watch(draft, () => session.save(), { flush: 'sync' })
+onMounted(scrollToBottom)
+onBeforeUnmount(() => session.dispose())
 
 async function sendMessage() {
-  const content = draft.value.trim()
-  if (!content || sending.value) {
-    return
-  }
+  await session.send()
+  await scrollToBottom()
+}
 
-  if (failedMessageId.value) {
-    messages.value = messages.value.filter(message => message.id !== failedMessageId.value)
-    failedMessageId.value = null
-  }
-
-  const userMessage = { id: createMessageId(), role: 'user', content }
-  messages.value.push(userMessage)
-  sending.value = true
-  errorMessage.value = ''
-
-  try {
-    const response = await chatWithAi(conversationId.value, content)
-    if (response?.conversationId) {
-      conversationId.value = String(response.conversationId)
-    }
-    const normalized = normalizeAiResponse(response)
-    messages.value.push({
-      id: createMessageId(),
-      role: 'assistant',
-      content: normalized.answer || '暂时没有找到符合条件的商品。你可以换个关键词或预算再试试。',
-      items: normalized.items
-    })
-    draft.value = ''
-  } catch (error) {
-    failedMessageId.value = userMessage.id
-    errorMessage.value = getErrorMessage(error)
-    // Keep the text in the composer so the user can correct or retry it.
-  } finally {
-    sending.value = false
-    await scrollToBottom()
-  }
+function startNewConversation() {
+  session.reset()
+  failedCovers.value.clear()
+  scrollToBottom()
 }
 
 function retryLastMessage() {
@@ -188,7 +190,7 @@ function openProduct(item) {
   if (!Number.isSafeInteger(productId) || productId <= 0) {
     return
   }
-  // Build a same-origin route from the validated id; never navigate to detailPath.
+  // 根据有效商品 ID 构造本站路由，绝不使用外部详情地址。
   router.push({ name: 'ProductDetail', params: { id: String(productId) } })
 }
 
@@ -204,12 +206,8 @@ function conditionLabel(level) {
 function getErrorMessage(error) {
   if (error?.response?.status === 401) {
     router.replace({ name: 'Login', query: { redirect: route.fullPath } })
-    return '登录状态已失效，请重新登录后再试。'
   }
-  if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT') {
-    return 'AI 响应时间较长，请稍后重试。'
-  }
-  return error?.message || '服务暂时不可用，请稍后重试。'
+  return getAiErrorMessage(error)
 }
 
 async function scrollToBottom() {
@@ -352,6 +350,39 @@ async function scrollToBottom() {
   scroll-behavior: smooth;
 }
 
+.ai-session-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 38px;
+  border-bottom: 1px dashed rgba($color-ink, 0.24);
+  background: $color-paper-2;
+  color: $color-text-muted;
+  font-size: 11px;
+}
+
+.ai-new-chat {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1.5px solid $color-ink;
+  border-radius: $radius-full;
+  background: $color-bg-card;
+  color: $color-text;
+  font: inherit;
+  font-weight: $font-weight-bold;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: $color-yellow;
+    box-shadow: 2px 2px 0 $color-ink;
+  }
+}
+
 .ai-message {
   display: flex;
   align-items: flex-start;
@@ -479,18 +510,59 @@ async function scrollToBottom() {
   }
 }
 
-.ai-product__index {
-  display: grid;
-  width: 31px;
-  height: 31px;
+.ai-product__cover {
+  display: block;
+  width: 66px;
+  height: 76px;
   flex-shrink: 0;
-  place-items: center;
+  overflow: hidden;
   border: 1.5px solid $color-ink;
-  border-radius: 50%;
+  border-radius: $radius-xs;
+  background: $color-paper-3;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.ai-product__placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  background: repeating-linear-gradient(135deg, rgba($color-ink, 0.05) 0 2px, transparent 2px 8px);
+
+  b {
+    font-family: $font-family-mono;
+    font-size: 18px;
+    color: $color-red-deep;
+  }
+
+  small { font-size: 10px; color: $color-text-muted; }
+}
+
+.ai-more-products {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 13px;
+  border: 1.5px solid $color-ink;
+  border-radius: $radius-full;
   background: $color-yellow;
-  font-family: $font-family-mono;
-  font-size: 10px;
-  font-weight: $font-weight-heavy;
+  color: $color-text;
+  font-size: 12px;
+  font-weight: $font-weight-bold;
+  transition: box-shadow $transition-fast, transform $transition-fast;
+
+  &:hover,
+  &:focus-visible {
+    box-shadow: 3px 3px 0 $color-ink;
+    transform: translate(-1px, -1px);
+  }
 }
 
 .ai-product__body {
@@ -742,6 +814,7 @@ async function scrollToBottom() {
   }
 
   .ai-suggestions,
+  .ai-session-bar,
   .ai-composer {
     padding-right: $space-md;
     padding-left: $space-md;

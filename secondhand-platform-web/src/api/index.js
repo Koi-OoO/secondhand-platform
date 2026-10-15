@@ -43,8 +43,10 @@ http.interceptors.response.use(
         }
         return Promise.reject(error)
       }
-      ElMessage.error(msg || '服务器异常')
-    } else {
+      if (!error.config?.skipErrorMessage) {
+        ElMessage.error(msg || '服务器异常')
+      }
+    } else if (!error.config?.skipErrorMessage) {
       ElMessage.error('网络连接失败，请检查网络')
     }
     return Promise.reject(error)

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     langchain_project: str = "secondhand-ai-service"  # LangChain 项目名
     langchain_api_key: str | None = None  # LangSmith API Key
     openai_api_key: str | None = None  # 模型服务 API Key
+    openai_base_url: str | None = None  # 兼容接口地址；未填写时使用 OpenAI 默认地址
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

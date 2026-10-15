@@ -111,7 +111,7 @@
               min="0"
             />
             <button class="price-apply" type="button" @click="applyPriceFilter">确定</button>
-            <button v-if="minPrice || maxPrice" class="price-reset" type="button" @click="resetPrice">重置</button>
+            <button v-if="(minPrice !== null && minPrice !== '') || (maxPrice !== null && maxPrice !== '')" class="price-reset" type="button" @click="resetPrice">重置</button>
           </div>
         </div>
       </div>
@@ -195,6 +195,7 @@ import { Search, Plus } from '@element-plus/icons-vue'
 import { getCategories } from '@/api/category'
 import { getProductPage } from '@/api/product'
 import { CONDITION } from '@/utils/constant'
+import { readProductListQuery, buildProductListQuery, buildProductPageParams } from '@/utils/productFilters'
 import ProductCard from '@/components/common/ProductCard.vue'
 
 const route = useRoute()
@@ -212,6 +213,7 @@ const currentCategory = ref(0)
 const conditionFilter = ref(0)
 const minPrice = ref(null)
 const maxPrice = ref(null)
+const appliedFilters = computed(() => readProductListQuery(route.query))
 
 const searchHistory = ref([])
 const showHistory = ref(false)
@@ -231,11 +233,12 @@ const currentCategoryName = computed(() => {
 })
 
 const activeFilters = computed(() => {
+  const filters = appliedFilters.value
   const r = []
-  if (keyword.value && keyword.value.trim()) {
+  if (filters.keyword) {
     r.push({
-      label: `搜索：${keyword.value.trim()}`,
-      remove: () => { keyword.value = ''; page.value = 1; syncQueryToUrl() }
+      label: `搜索：${filters.keyword}`,
+      remove: () => { keyword.value = ''; applySearch() }
     })
   }
   if (currentCategoryName.value) {
@@ -244,18 +247,18 @@ const activeFilters = computed(() => {
       remove: () => selectCategory(0)
     })
   }
-  if (conditionFilter.value > 0) {
+  if (filters.conditionLevel > 0) {
     r.push({
-      label: CONDITION[conditionFilter.value],
-      remove: () => { conditionFilter.value = 0; fetchProducts() }
+      label: CONDITION[filters.conditionLevel],
+      remove: () => toggleCondition(0)
     })
   }
-  if (minPrice.value || maxPrice.value) {
-    const lo = minPrice.value ? `¥${minPrice.value}` : '¥0'
-    const hi = maxPrice.value ? `¥${maxPrice.value}` : ''
+  if (filters.minPrice !== null || filters.maxPrice !== null) {
+    const lo = filters.minPrice !== null ? `¥${filters.minPrice}` : '¥0'
+    const hi = filters.maxPrice !== null ? `¥${filters.maxPrice}` : ''
     r.push({
       label: `${lo}${hi ? ' - ' + hi : '以上'}`,
-      remove: () => { minPrice.value = null; maxPrice.value = null; fetchProducts() }
+      remove: resetPrice
     })
   }
   return r
@@ -269,7 +272,7 @@ onMounted(() => {
 })
 
 watch(
-  () => ({ ...route.query }),
+  () => route.query,
   () => {
     syncFromQuery()
     fetchProducts()
@@ -277,10 +280,15 @@ watch(
 )
 
 function syncFromQuery() {
-  currentCategory.value = route.query.categoryId ? Number(route.query.categoryId) : 0
-  keyword.value = typeof route.query.keyword === 'string' ? route.query.keyword : ''
-  sort.value = route.query.sort || 'latest'
-  page.value = route.query.page ? Number(route.query.page) : 1
+  // URL 是已生效筛选的唯一来源，价格与成色也在刷新及历史导航时恢复。
+  const filters = appliedFilters.value
+  currentCategory.value = filters.categoryId
+  keyword.value = filters.keyword
+  sort.value = filters.sort
+  page.value = filters.page
+  minPrice.value = filters.minPrice
+  maxPrice.value = filters.maxPrice
+  conditionFilter.value = filters.conditionLevel
 }
 
 function loadHistory() {
@@ -319,55 +327,42 @@ function hideHistoryDelayed() {
 }
 
 function selectCategory(id) {
-  currentCategory.value = id
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ categoryId: id, page: 1 })
 }
 
 function toggleCondition(val) {
-  conditionFilter.value = val === conditionFilter.value ? 0 : val
-  page.value = 1
-  fetchProducts()
+  const conditionLevel = val === appliedFilters.value.conditionLevel ? 0 : val
+  syncQueryToUrl({ conditionLevel, page: 1 })
 }
 
 function applySearch() {
   keyword.value = keyword.value.trim()
   if (keyword.value) saveHistory(keyword.value)
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ keyword: keyword.value, page: 1 })
 }
 
 function applyPriceFilter() {
-  page.value = 1
-  fetchProducts()
+  syncQueryToUrl({ minPrice: minPrice.value, maxPrice: maxPrice.value, page: 1 })
 }
 
-function syncQueryToUrl() {
-  const q = {}
-  if (currentCategory.value > 0) q.categoryId = currentCategory.value
-  if (keyword.value && keyword.value.trim()) q.keyword = keyword.value.trim()
-  if (sort.value !== 'latest') q.sort = sort.value
-  if (page.value > 1) q.page = page.value
-  router.replace({ query: q })
+function syncQueryToUrl(changes) {
+  // 修改一个条件时保留其他已生效条件；未确认的输入不会悄悄影响翻页。
+  const query = buildProductListQuery({ ...appliedFilters.value, ...changes })
+  router.replace({ name: 'Products', query })
 }
 
 function resetPrice() {
   minPrice.value = null
   maxPrice.value = null
-  page.value = 1
-  fetchProducts()
+  syncQueryToUrl({ minPrice: null, maxPrice: null, page: 1 })
 }
 
 function changeSort(val) {
-  sort.value = val
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ sort: val, page: 1 })
 }
 
 function handlePageChange(val) {
-  page.value = val
-  syncQueryToUrl()
-  fetchProducts()
+  syncQueryToUrl({ page: val })
 }
 
 async function fetchCategories() {
@@ -379,16 +374,7 @@ async function fetchCategories() {
 async function fetchProducts() {
   loading.value = true
   try {
-    const params = {
-      page: page.value,
-      size: size.value,
-      sort: sort.value
-    }
-    if (currentCategory.value > 0) params.categoryId = currentCategory.value
-    if (keyword.value) params.keyword = keyword.value
-    if (conditionFilter.value > 0) params.conditionLevel = conditionFilter.value
-    if (minPrice.value) params.minPrice = minPrice.value
-    if (maxPrice.value) params.maxPrice = maxPrice.value
+    const params = buildProductPageParams(route.query, size.value)
     const data = await getProductPage(params)
     products.value = data.records || []
     total.value = data.total || 0

@@ -73,6 +73,24 @@ class JavaMarketplaceClient:
         return payload.get("data")
 
     @staticmethod
+    def _cover_url(raw: dict[str, Any]) -> str | None:
+        """保留已有封面字段，或从Java的images列表按sort选择有效封面。"""
+        direct = raw.get("coverUrl")
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        images = raw.get("images")
+        if not isinstance(images, list):
+            return None
+        valid = [image for image in images if isinstance(image, dict)
+                 and isinstance(image.get("url"), str) and image["url"].strip()]
+        if not valid:
+            return None
+        # 兼容缺少sort的旧图片数据；不让异常图片记录影响整个商品查询。
+        cover = min(valid, key=lambda image: image.get("sort")
+                    if isinstance(image.get("sort"), (int, float)) else 0)
+        return cover["url"].strip()
+
+    @staticmethod
     def _card(raw: dict[str, Any]) -> ProductCard:
         """将 Java 商品 JSON 转换为 Agent 对外使用的商品卡片结构。"""
         product_id = raw.get("productId", raw.get("id"))
@@ -86,6 +104,7 @@ class JavaMarketplaceClient:
             conditionLevel=int(raw.get("conditionLevel") or 0),
             tradeLocation=str(raw.get("tradeLocation") or ""),
             detailPath=str(raw.get("detailPath") or f"/product/{product_id}"),
+            coverUrl=JavaMarketplaceClient._cover_url(raw),
         )
 
     async def search_listings(

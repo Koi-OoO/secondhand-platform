@@ -83,7 +83,9 @@ async def test_run_agent_keeps_items_empty_when_java_returns_no_results() -> Non
 
 
 @pytest.mark.asyncio
-async def test_missing_model_is_a_stable_unavailable_error() -> None:
+async def test_missing_model_is_a_stable_unavailable_error(monkeypatch) -> None:
+    # 明确设置缺失模型的前提，避免测试读取开发者 .env 中的真实模型。
+    monkeypatch.setattr('app.agent.runtime.settings.model_name', None)
     request = AgentChatRequest(
         conversationId="c-1",
         message="找台灯",

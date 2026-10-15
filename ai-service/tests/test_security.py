@@ -30,7 +30,8 @@ def test_agent_route_rejects_wrong_internal_token() -> None:
     assert response.status_code == 401
 
 
-def test_agent_route_returns_stable_503_when_model_is_not_configured() -> None:
+def test_agent_route_returns_stable_503_when_model_is_not_configured(monkeypatch) -> None:
+    monkeypatch.setattr('app.agent.runtime.settings.model_name', None)
     client = TestClient(app)
     response = client.post(
         "/internal/agent/chat",

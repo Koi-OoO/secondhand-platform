@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import inspect
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.marketplace.prompts import MARKETPLACE_SYSTEM_PROMPT
-from app.agent.marketplace.schemas import ProductCard
+from app.agent.marketplace.schemas import ProductCard, SearchFilters
 from app.agent.marketplace.tools import build_marketplace_tools
 from app.agent.state import AgentChatRequest, ExecutionContext
 from app.core.config import settings
@@ -27,6 +28,7 @@ class AgentRunResult(BaseModel):
     conversation_id: str | None = Field(default=None, alias="conversationId")
     answer: str
     items: list[ProductCard] = Field(default_factory=list)
+    search_filters: SearchFilters | None = Field(default=None, alias="searchFilters")
     trace_id: str = Field(alias="traceId")
 
 
@@ -75,7 +77,16 @@ def create_marketplace_agent(tools, model_name: str | None = None):
     except ImportError as exc:  # 运行环境未安装 LangChain OpenAI 适配器
         raise AgentUnavailableError("AI 运行依赖未安装") from exc
 
-    model = ChatOpenAI(model=model_name, api_key=settings.openai_api_key)
+    model_options = {
+        'model': model_name,
+        'api_key': settings.openai_api_key,
+        'base_url': settings.openai_base_url or None,
+    }
+    if urlsplit(settings.openai_base_url or '').hostname == 'api.deepseek.com':
+        # ChatOpenAI 不保留 DeepSeek 的 reasoning_content，首次联调使用非思考模式，
+        # 避免工具结果回传时因缺少推理内容而失败。
+        model_options['extra_body'] = {'thinking': {'type': 'disabled'}}
+    model = ChatOpenAI(**model_options)
     return create_agent(model=model, tools=tools, system_prompt=MARKETPLACE_SYSTEM_PROMPT)
 
 
@@ -136,5 +147,6 @@ async def run_agent(
         conversationId=request.conversation_id,
         answer=answer,
         items=execution_context.latest_items,
+        searchFilters=execution_context.latest_search_filters,
         traceId=request.trace_id,
     )

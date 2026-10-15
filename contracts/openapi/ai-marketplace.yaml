@@ -62,12 +62,19 @@ components:
       type: object
       required: [answer, items, traceId]
       properties:
+        conversationId:
+          type: [string, 'null']
         answer:
           type: string
         items:
           type: array
           items:
             $ref: '#/components/schemas/ProductCard'
+        searchFilters:
+          description: 成功搜索工具实际使用的筛选条件；未搜索时为空，不包含工具分页。
+          anyOf:
+            - $ref: '#/components/schemas/SearchFilters'
+            - type: 'null'
         traceId:
           type: string
     ProductCard:
@@ -93,6 +100,32 @@ components:
           description: Trade location shown to the user; no product campus filter in phase one.
         detailPath:
           type: string
+        coverUrl:
+          type: [string, 'null']
+          description: Java商品images中的真实封面，缺图时为空。
+    SearchFilters:
+      type: object
+      properties:
+        keyword:
+          type: [string, 'null']
+          maxLength: 200
+          description: 查询前去除首尾空格，空串视为未指定。
+        categoryId:
+          type: [integer, 'null']
+          minimum: 1
+        minPrice:
+          type: [number, 'null']
+          minimum: 0
+        maxPrice:
+          type: [number, 'null']
+          minimum: 0
+        conditionLevel:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 4
+        sort:
+          type: string
+          default: latest
     JavaResult:
       type: object
       description: Unified Java backend envelope returned by upstream APIs.

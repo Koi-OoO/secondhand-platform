@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agent.marketplace.schemas import ProductCard, UserContext
+from app.agent.marketplace.schemas import ProductCard, SearchFilters, UserContext
 
 
 class AgentChatRequest(BaseModel):
@@ -26,6 +26,7 @@ class AgentChatResponse(BaseModel):
     conversation_id: str | None = Field(default=None, alias="conversationId")
     answer: str
     items: list["ProductCard"] = Field(default_factory=list)
+    search_filters: SearchFilters | None = Field(default=None, alias="searchFilters")
     trace_id: str = Field(alias="traceId")
 
 
@@ -34,6 +35,7 @@ class ExecutionContext:
     """一次 Agent 调用期间由多个工具共享的可变状态。"""
 
     latest_items: list["ProductCard"] = field(default_factory=list)
+    latest_search_filters: SearchFilters | None = None  # 仅记录本次成功搜索的真实参数
 
 
 AgentChatResponse.model_rebuild()
