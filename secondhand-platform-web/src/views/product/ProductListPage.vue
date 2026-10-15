@@ -147,7 +147,7 @@
 
     <div v-if="loading" class="loading-wrap">
       <div class="skeleton-grid">
-        <div v-for="n in 12" :key="n" class="skeleton-card">
+        <div v-for="n in size" :key="n" class="skeleton-card">
           <div class="skeleton-img"></div>
           <div class="skeleton-body">
             <div class="skeleton-line skeleton-line--title"></div>
@@ -204,7 +204,8 @@ const categories = ref([])
 const products = ref([])
 const loading = ref(false)
 const page = ref(1)
-const size = ref(16)
+// 宽屏每行 5 件，每页 20 件，完整页显示 4 行。
+const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
 const sort = ref('latest')
