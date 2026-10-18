@@ -11,6 +11,10 @@ import com.secondhand.mapper.ProductMapper;
 import com.secondhand.service.ProductService;
 import com.secondhand.util.CacheUtil;
 import com.secondhand.util.Result;
+import com.secondhand.search.ProductSearchCriteria;
+import com.secondhand.search.ProductSearchService;
+import com.secondhand.search.ProductSearchUnavailableException;
+import org.springframework.beans.factory.ObjectProvider;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -77,6 +81,10 @@ public class ProductServiceImpl implements ProductService {
     @Autowired  // 注入缓存工具类
     private CacheUtil cacheUtil;
 
+    // 与商品广场复用全文搜索；ES 关闭时允许传统服务启动，但 AI 查询明确报错。
+    @Autowired
+    private ObjectProvider<ProductSearchService> productSearchService;
+
     /**
      * 分页查询商品列表（支持多条件筛选）
      */
@@ -98,8 +106,11 @@ public class ProductServiceImpl implements ProductService {
                                     String keyword, BigDecimal minPrice,
                                     BigDecimal maxPrice, Integer conditionLevel,
                                     String sort) {
-        return pageProductsInternal(page, size, null, categoryId, keyword,
-                minPrice, maxPrice, conditionLevel, sort, false);
+        ProductSearchCriteria criteria = new ProductSearchCriteria(page, size, keyword, categoryId,
+                minPrice, maxPrice, conditionLevel, sort);
+        ProductSearchService search = productSearchService.getIfAvailable();
+        if (search == null) throw new ProductSearchUnavailableException("商品全文搜索尚未启用", null);
+        return Result.success(search.search(criteria));
     }
 
     /**

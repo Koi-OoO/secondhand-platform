@@ -1,4 +1,4 @@
-const SORT_VALUES = new Set(['latest', 'hottest', 'price_asc', 'price_desc'])
+const SORT_VALUES = new Set(['relevance', 'latest', 'hottest', 'price_asc', 'price_desc'])
 
 /** 解析筛选数值，空值与预算 0 分别处理，拒绝数组和非有限数。 */
 function filterNumber(value) {

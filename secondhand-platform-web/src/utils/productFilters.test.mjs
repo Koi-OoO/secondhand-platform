@@ -24,3 +24,7 @@ test('rejects invalid numeric and repeated route values', () => {
     keyword: '', categoryId: 0, minPrice: null, maxPrice: null, conditionLevel: 0, sort: 'latest', page: 1
   })
 })
+
+test('ES relevance 排序在 AI 继续浏览和列表刷新时保持一致', () => {
+  assert.equal(filters.readProductListQuery({ keyword: '苹果手机', sort: 'relevance' }).sort, 'relevance')
+})

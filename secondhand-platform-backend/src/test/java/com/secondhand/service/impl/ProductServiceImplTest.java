@@ -8,6 +8,12 @@ import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
 import com.secondhand.util.CacheUtil;
 import com.secondhand.util.Result;
+import com.secondhand.search.ProductSearchCriteria;
+import com.secondhand.search.ProductSearchService;
+import com.secondhand.search.ProductSearchUnavailableException;
+import org.springframework.beans.factory.ObjectProvider;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -231,22 +237,31 @@ class ProductServiceImplTest {
     }
 
     @Test
-    void pageProductsForAiQueriesOnSaleProductsWithoutRecordingHotKeyword() {
-        Page<Product> emptyPage = new Page<>(1, 12);
-        emptyPage.setRecords(Collections.emptyList());
-        when(productMapper.selectPageWithDetails(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(emptyPage);
-        ZSetOperations<String, Object> zSetOperations = mock(ZSetOperations.class);
-        when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-
-        Result result = service.pageProductsForAi(1, 12, 3, "switch",
+    @SuppressWarnings("unchecked")
+    void pageProductsForAiUsesEsWithoutLegacyQueryOrHotKeyword() {
+        ProductSearchService search = mock(ProductSearchService.class);
+        ObjectProvider<ProductSearchService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(search);
+        ReflectionTestUtils.setField(service, "productSearchService", provider);
+        ProductSearchCriteria criteria = new ProductSearchCriteria(1, 12, "苹果手机", 3,
                 new BigDecimal("1"), new BigDecimal("2000"), 2, "latest");
+        Page<Product> expected = new Page<>(1, 12);
+        when(search.search(criteria)).thenReturn(expected);
+        Result result = service.pageProductsForAi(1, 12, 3, "苹果手机",
+                new BigDecimal("1"), new BigDecimal("2000"), 2, "latest");
+        assertThat(result.getData()).isSameAs(expected);
+        verify(search).search(criteria);
+        verifyNoInteractions(productMapper, redisTemplate);
+    }
 
-        assertThat(result.getCode()).isEqualTo(200);
-        verify(productMapper).selectPageWithDetails(
-                any(), isNull(), eq(3), eq("switch"), eq(new BigDecimal("1")),
-                eq(new BigDecimal("2000")), eq(2), eq(1), eq("latest"));
-        verify(zSetOperations, never()).incrementScore(any(), any(), anyDouble());
+    @Test
+    @SuppressWarnings("unchecked")
+    void aiSearchDisabledNeverFallsBackToMysql() {
+        ObjectProvider<ProductSearchService> provider = mock(ObjectProvider.class);
+        ReflectionTestUtils.setField(service, "productSearchService", provider);
+        assertThatThrownBy(() -> service.pageProductsForAi(1, 10, null, "手机", null, null, null, "latest"))
+                .isInstanceOf(ProductSearchUnavailableException.class);
+        verifyNoInteractions(productMapper, redisTemplate);
     }
 
     @Test
@@ -284,17 +299,10 @@ class ProductServiceImplTest {
     }
 
     @Test
-    void pageProductsForAiLimitsPageSizeTo50() {
-        Page<Product> emptyPage = new Page<>(1, 50);
-        emptyPage.setRecords(Collections.emptyList());
-        when(productMapper.selectPageWithDetails(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(emptyPage);
-
-        service.pageProductsForAi(1, 100, null, null, null, null, null, "latest");
-
-        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
-        verify(productMapper).selectPageWithDetails(pageCaptor.capture(), any(), any(), any(), any(), any(), any(), any(), any());
-        assertThat(pageCaptor.getValue().getSize()).isEqualTo(50);
+    void aiSearchRejectsInvalidSizeInsteadOfSilentlyClamping() {
+        assertThatThrownBy(() -> service.pageProductsForAi(1, 100, null, null, null, null, null, "latest"))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(productMapper);
     }
 
     @Test

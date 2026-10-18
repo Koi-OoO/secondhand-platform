@@ -258,6 +258,7 @@ const HISTORY_KEY = 'search_history'
 const MAX_HISTORY = 8
 
 const sortOptions = [
+  { label: '相关度', value: 'relevance' },
   { label: '最新', value: 'latest' },
   { label: '最热', value: 'hottest' },
   { label: '低价', value: 'price_asc' },
@@ -384,7 +385,9 @@ function applyPriceFilter() {
 function syncQueryToUrl(changes) {
   // 修改一个条件时保留其他已生效条件；未确认的输入不会悄悄影响翻页。
   const query = buildProductListQuery({ ...appliedFilters.value, ...changes })
-  router.replace({ name: 'Products', query })
+  const target = { name: 'Products', query }
+  if (router.resolve(target).fullPath === route.fullPath) fetchProducts()
+  else router.replace(target)
 }
 
 function resetPrice() {

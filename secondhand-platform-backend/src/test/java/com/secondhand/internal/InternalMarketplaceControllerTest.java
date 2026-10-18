@@ -124,6 +124,21 @@ class InternalMarketplaceControllerTest {
     }
 
     @Test
+    void unavailableSearchReturns503() throws Exception {
+        when(productService.pageProductsForAi(1, 10, null, null, null, null, null, "latest"))
+                .thenThrow(new com.secondhand.search.ProductSearchUnavailableException("搜索服务暂时不可用", null));
+        mockMvc.perform(get("/internal/marketplace/listings/search")).andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void invalidEsWindowReturns400() throws Exception {
+        when(productService.pageProductsForAi(1001, 10, null, null, null, null, null, "latest"))
+                .thenThrow(new IllegalArgumentException("查询范围不能超过10000条"));
+        mockMvc.perform(get("/internal/marketplace/listings/search").param("page", "1001"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void detailDelegatesToReadOnlyService() throws Exception {
         when(productService.getDetailForAi(8L)).thenReturn(Result.success(null));
 

@@ -2,6 +2,9 @@ package com.secondhand.internal;
 
 import com.secondhand.service.ProductService;
 import com.secondhand.util.Result;
+import com.secondhand.search.ProductSearchUnavailableException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import java.math.BigDecimal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,5 +51,15 @@ public class InternalMarketplaceController {
             return Result.error("商品ID不合法");
         }
         return productService.getDetailForAi(id);
+    }
+    /** 搜索失败保留明确状态，Python 据此提示用户重试，不改用旧 MySQL 搜索。 */
+    @ExceptionHandler(ProductSearchUnavailableException.class)
+    public ResponseEntity<Result> unavailable(ProductSearchUnavailableException ex) {
+        return ResponseEntity.status(503).body(Result.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Result> invalidSearch(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Result.error(ex.getMessage()));
     }
 }
