@@ -33,13 +33,13 @@
 
         <el-form-item label="商品分类" prop="categoryId">
           <el-cascader
-            v-model="selectedCategory"
+            v-model="form.categoryId"
             :options="categoryOptions"
-            :props="{ value: 'id', label: 'name', children: 'children', emitPath: false }"
+            :props="{ value: 'id', label: 'name', children: 'children', emitPath: false, checkStrictly: true }"
             class="full-width"
-            placeholder="选择分类"
-            @change="form.categoryId = $event"
+            placeholder="选择大类，再选择具体子分类"
           />
+          <div class="form-tip">请选择具体子分类；旧商品编辑时可保留原有分类。</div>
         </el-form-item>
 
         <el-form-item label="商品成色" prop="conditionLevel">
@@ -109,13 +109,14 @@ import { getCategories } from '@/api/category'
 import { getProductDetail, publishProduct, updateProduct } from '@/api/product'
 import { uploadImage } from '@/api/upload'
 import { CONDITION } from '@/utils/constant'
+import { categorySelectionError } from '@/utils/categoryTree'
 
 const route = useRoute()
 const router = useRouter()
 const formRef = ref(null)
 const fileList = ref([])
 const categoryOptions = ref([])
-const selectedCategory = ref(null)
+const originalCategoryId = ref(null)
 const submitting = ref(false)
 
 const isEdit = computed(() => route.name === 'ProductEdit')
@@ -144,7 +145,13 @@ const rules = {
     { required: true, message: '请输入商品标题', trigger: 'blur' },
     { min: 2, max: 100, message: '标题长度需在 2 到 100 个字符之间', trigger: 'blur' }
   ],
-  categoryId: [{ required: true, message: '请选择商品分类', trigger: 'change' }],
+  categoryId: [{
+    validator: (_rule, value, callback) => {
+      const message = categorySelectionError(categoryOptions.value, value, originalCategoryId.value)
+      callback(message ? new Error(message) : undefined)
+    },
+    trigger: 'change'
+  }],
   conditionLevel: [{ required: true, message: '请选择商品成色', trigger: 'change' }],
   price: [{ required: true, message: '请输入售价', trigger: 'blur' }],
   stock: [{ required: true, message: '请输入库存', trigger: 'blur' }]
@@ -178,6 +185,7 @@ async function loadProduct() {
       router.replace('/user/products')
       return
     }
+    originalCategoryId.value = data.categoryId
     form.title = data.title
     form.categoryId = data.categoryId
     form.conditionLevel = data.conditionLevel
@@ -193,7 +201,6 @@ async function loadProduct() {
       url,
       status: 'success'
     }))
-    selectedCategory.value = data.categoryId
   } catch {
     ElMessage.error('加载商品信息失败')
     router.replace('/user/products')

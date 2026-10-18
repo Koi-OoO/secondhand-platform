@@ -7,6 +7,11 @@ export function getProductPage(params = {}) {
   return http.get('/product/page', { params })
 }
 
+/** 商品广场全文搜索；筛选参数与金额单位沿用商品列表，返回 records/total。 */
+export function searchProducts(params = {}) {
+  return http.get('/product/search', { params })
+}
+
 /** 获取商品详情 */
 export function getProductDetail(id) {
   return http.get(`/product/detail/${id}`)

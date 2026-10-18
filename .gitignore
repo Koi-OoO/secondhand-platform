@@ -30,3 +30,6 @@ dist/
 
 # ===== 临时文件 =====
 **/temp_img.png
+
+# Canal 本机 MySQL 凭据，不提交真实密码
+infrastructure/canal/.env

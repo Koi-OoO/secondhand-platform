@@ -68,6 +68,31 @@ app:
     internal-token: ${AI_INTERNAL_TOKEN:dev-ai-internal-token}
     connect-timeout-ms: ${AI_CONNECT_TIMEOUT_MS:1000}
     read-timeout-ms: ${AI_READ_TIMEOUT_MS:30000}
+  search:
+    canal:
+      # Java 到 Canal 的连接；Canal 到 MySQL 的账号在 Docker 本地 env 中配置。
+      enabled: ${PRODUCT_SEARCH_CANAL_ENABLED:false}
+      host: ${PRODUCT_SEARCH_CANAL_HOST:127.0.0.1}
+      port: ${PRODUCT_SEARCH_CANAL_PORT:11111}
+      destination: ${PRODUCT_SEARCH_CANAL_DESTINATION:campus}
+      schema: ${PRODUCT_SEARCH_CANAL_SCHEMA:secondhand}
+      username: ${PRODUCT_SEARCH_CANAL_USERNAME:}
+      password: ${PRODUCT_SEARCH_CANAL_PASSWORD:}
+      batch-size: 100
+      socket-timeout-millis: 10000
+      retry-delay-millis: 5000
+      idle-delay-millis: 500
+    elasticsearch:
+      # 商品广场使用 ES 搜索；初始化和增量同步步骤见 README-canal.md。
+      enabled: ${PRODUCT_SEARCH_ES_ENABLED:false}
+      # 仅初始化数据时显式开启；导入成功后关闭，避免每次重启全量扫描。
+      import-on-startup: ${PRODUCT_SEARCH_ES_IMPORT_ON_STARTUP:false}
+      url: ${PRODUCT_SEARCH_ES_URL:http://127.0.0.1:9200}
+      index-name: ${PRODUCT_SEARCH_ES_INDEX:campus_products_v2}
+      connect-timeout-millis: ${PRODUCT_SEARCH_ES_CONNECT_TIMEOUT_MS:1000}
+      socket-timeout-millis: ${PRODUCT_SEARCH_ES_SOCKET_TIMEOUT_MS:5000}
+      username: ${PRODUCT_SEARCH_ES_USERNAME:}
+      password: ${PRODUCT_SEARCH_ES_PASSWORD:}
   oss:
     endpoint: ${ALIYUN_OSS_ENDPOINT:}
     access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}

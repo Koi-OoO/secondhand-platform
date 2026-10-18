@@ -7,6 +7,16 @@
     <sql id="searchTitle">
         LOWER(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(p.title, '附赠', 1), '附带', 1), '赠送', 1), '赠', 1))
     </sql>
+    <!-- 命中后回查 MySQL：避免每件商品各查一次，也不从索引返回过期展示数据。 -->
+    <select id="selectSearchDetailsByIds" resultType="com.secondhand.entity.Product">
+        SELECT p.*, u.nickname AS seller_nickname, u.username AS seller_username,
+               u.avatar AS seller_avatar, c.name AS category_name
+        FROM product p
+        LEFT JOIN user u ON p.seller_id = u.id
+        LEFT JOIN category c ON p.category_id = c.id
+        WHERE p.status = 1 AND p.id IN
+        <foreach collection="productIds" item="pid" open="(" separator="," close=")">#{pid}</foreach>
+    </select>
 
     <!-- 分页查询商品列表（多条件筛选 + 排序 + 关联卖家信息和分类名） -->
     <select id="selectPageWithDetails" resultType="com.secondhand.entity.Product">

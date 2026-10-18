@@ -95,6 +95,112 @@ class ProductServiceImplTest {
     }
 
     @Test
+    void publishRequiresCategoryAndDoesNotWriteOnFailure() {
+        Product product = validProduct();
+        product.setStock(1);
+        product.setCategoryId(null);
+
+        Result result = service.publish(7L, product, List.of("/uploads/test.jpg"));
+
+        assertThat(result.getCode()).isEqualTo(500);
+        assertThat(result.getMessage()).contains("请选择商品分类");
+        verify(productMapper, never()).insert(any(Product.class));
+    }
+
+    @Test
+    void publishRejectsParentCategoryButAcceptsItsLeaf() {
+        Product parentProduct = validProduct();
+        parentProduct.setStock(1);
+        when(categoryMapper.selectById(3)).thenReturn(validCategory());
+        Category child = new Category();
+        child.setId(30);
+        child.setParentId(3);
+        when(categoryMapper.selectByParentId(3)).thenReturn(List.of(child));
+
+        Result result = service.publish(7L, parentProduct, List.of("/uploads/test.jpg"));
+
+        assertThat(result.getCode()).isEqualTo(500);
+        assertThat(result.getMessage()).contains("具体子分类");
+        verify(productMapper, never()).insert(any(Product.class));
+
+        Product leafProduct = validProduct();
+        leafProduct.setStock(1);
+        leafProduct.setCategoryId(30);
+        when(categoryMapper.selectById(30)).thenReturn(child);
+        assertThat(service.publish(7L, leafProduct, List.of("/uploads/test.jpg")).getCode()).isEqualTo(200);
+    }
+
+    @Test
+    void categoryMustExistBeforePublishOrCategoryChange() {
+        Product product = validProduct();
+        product.setStock(1);
+        product.setCategoryId(999);
+        assertThat(service.publish(7L, product, List.of("/uploads/test.jpg")).getMessage())
+                .contains("分类不存在");
+        verify(productMapper, never()).insert(any(Product.class));
+
+        prepareLegacyProduct();
+        Product edit = new Product();
+        edit.setId(40L);
+        edit.setCategoryId(999);
+        assertThat(service.update(7L, edit).getMessage()).contains("分类不存在");
+        verify(productMapper, never()).updateById(any(Product.class));
+    }
+
+    @Test
+    void editingLegacyParentCategoryCanKeepOriginalOrOmitIt() {
+        prepareLegacyProduct();
+        when(categoryMapper.selectById(3)).thenReturn(validCategory());
+        Category child = new Category();
+        child.setId(30);
+        when(categoryMapper.selectByParentId(3)).thenReturn(List.of(child));
+        Product edit = new Product();
+        edit.setId(40L);
+        edit.setCategoryId(3);
+        edit.setPrice(new BigDecimal("99.00"));
+
+        assertThat(service.update(7L, edit).getCode()).isEqualTo(200);
+        // 旧商品保留大类时无需重新判断叶子，避免补分类后无法编辑。
+        verify(categoryMapper, never()).selectByParentId(3);
+        Product partialEdit = new Product();
+        partialEdit.setId(40L);
+        partialEdit.setPrice(new BigDecimal("88.00"));
+        assertThat(service.update(7L, partialEdit).getCode()).isEqualTo(200);
+    }
+
+    @Test
+    void changingCategoryRejectsAnotherParentAndAllowsLeaf() {
+        prepareLegacyProduct();
+        Category parent = new Category();
+        parent.setId(4);
+        Category child = new Category();
+        child.setId(41);
+        child.setParentId(4);
+        when(categoryMapper.selectById(4)).thenReturn(parent);
+        when(categoryMapper.selectByParentId(4)).thenReturn(List.of(child));
+        Product edit = new Product();
+        edit.setId(40L);
+        edit.setCategoryId(4);
+
+        assertThat(service.update(7L, edit).getCode()).isEqualTo(500);
+        verify(productMapper, never()).updateById(any(Product.class));
+
+        edit.setCategoryId(41);
+        when(categoryMapper.selectById(41)).thenReturn(child);
+        assertThat(service.update(7L, edit).getCode()).isEqualTo(200);
+        verify(productMapper).updateById(edit);
+    }
+
+    private void prepareLegacyProduct() {
+        Product existing = new Product();
+        existing.setId(40L);
+        existing.setSellerId(7L);
+        existing.setCategoryId(3);
+        existing.setStatus(2);
+        when(productMapper.selectById(40L)).thenReturn(existing);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void getDetailReturnsProductWhenCacheUtilResolvesIt() {
         Product product = new Product();

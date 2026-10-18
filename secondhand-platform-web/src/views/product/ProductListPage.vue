@@ -65,9 +65,32 @@
             :key="cat.id"
             type="button"
             class="chip"
-            :class="{ 'chip--active': currentCategory === cat.id }"
+            :class="{ 'chip--active': categorySelection.root?.id === cat.id }"
+            :aria-pressed="categorySelection.root?.id === cat.id"
             @click="selectCategory(cat.id)"
           >{{ cat.name }}</button>
+        </div>
+      </div>
+
+      <div v-if="categorySelection.children.length" class="filter-block">
+        <span class="filter-label">细分</span>
+        <div class="filter-chips" aria-label="商品子分类">
+          <button
+            type="button"
+            class="chip chip--sm"
+            :class="{ 'chip--active': currentCategory === categorySelection.root.id }"
+            :aria-pressed="currentCategory === categorySelection.root.id"
+            @click="selectCategory(categorySelection.root.id)"
+          >全部{{ categorySelection.root.name }}</button>
+          <button
+            v-for="child in categorySelection.children"
+            :key="child.id"
+            type="button"
+            class="chip chip--sm"
+            :class="{ 'chip--active': currentCategory === child.id }"
+            :aria-pressed="currentCategory === child.id"
+            @click="selectCategory(child.id)"
+          >{{ child.name }}</button>
         </div>
       </div>
 
@@ -117,7 +140,7 @@
       </div>
     </section>
 
-    <section class="result-bar">
+    <section v-if="!loadError" class="result-bar">
       <div>
         <strong>{{ total }}</strong>
         <span>件商品</span>
@@ -147,7 +170,7 @@
 
     <div v-if="loading" class="loading-wrap">
       <div class="skeleton-grid">
-        <div v-for="n in 12" :key="n" class="skeleton-card">
+        <div v-for="n in size" :key="n" class="skeleton-card">
           <div class="skeleton-img"></div>
           <div class="skeleton-body">
             <div class="skeleton-line skeleton-line--title"></div>
@@ -159,7 +182,13 @@
     </div>
 
     <template v-else>
-      <div v-if="products.length" class="product-grid">
+      <div v-if="loadError" class="empty-state" role="alert">
+        <p class="empty-text">商品加载失败</p>
+        <p class="empty-hint">{{ loadError }}</p>
+        <button type="button" class="price-apply" @click="fetchProducts">重新加载</button>
+      </div>
+
+      <div v-else-if="products.length" class="product-grid">
         <ProductCard
           v-for="item in products"
           :key="item.id"
@@ -175,16 +204,19 @@
       </div>
     </template>
 
-    <div v-if="total > size" class="pagination-wrap">
+    <div v-if="!loading && !loadError && total > size" class="pagination-wrap">
       <el-pagination
         v-model:current-page="page"
         :page-size="size"
-        :total="total"
+        :total="Math.min(total, 10000)"
         layout="prev, pager, next"
         background
         @current-change="handlePageChange"
       />
     </div>
+    <p v-if="!loading && !loadError && total > 10000" class="search-window-hint">
+      结果较多，最多浏览前 10000 件商品，请缩小筛选范围。
+    </p>
   </div>
 </template>
 
@@ -193,9 +225,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { getCategories } from '@/api/category'
-import { getProductPage } from '@/api/product'
+import { searchProducts } from '@/api/product'
 import { CONDITION } from '@/utils/constant'
 import { readProductListQuery, buildProductListQuery, buildProductPageParams } from '@/utils/productFilters'
+import { resolveCategory } from '@/utils/categoryTree'
 import ProductCard from '@/components/common/ProductCard.vue'
 
 const route = useRoute()
@@ -204,8 +237,12 @@ const router = useRouter()
 const categories = ref([])
 const products = ref([])
 const loading = ref(false)
+const loadError = ref('')
+// 只接受最后一次请求的结果，防止连续切换筛选时旧结果覆盖新结果。
+let requestSequence = 0
 const page = ref(1)
-const size = ref(16)
+// 宽屏每行 5 件，每页 20 件，完整页显示 4 行。
+const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
 const sort = ref('latest')
@@ -227,10 +264,9 @@ const sortOptions = [
   { label: '高价', value: 'price_desc' }
 ]
 
-const currentCategoryName = computed(() => {
-  if (currentCategory.value <= 0) return ''
-  return categories.value.find(cat => cat.id === currentCategory.value)?.name || ''
-})
+// URL 中仅保存实际筛选分类 ID，父类高亮与子类按钮从分类树恢复。
+const categorySelection = computed(() => resolveCategory(categories.value, currentCategory.value))
+const currentCategoryName = computed(() => categorySelection.value.label)
 
 const activeFilters = computed(() => {
   const filters = appliedFilters.value
@@ -372,17 +408,22 @@ async function fetchCategories() {
 }
 
 async function fetchProducts() {
+  const sequence = ++requestSequence
   loading.value = true
+  loadError.value = ''
   try {
     const params = buildProductPageParams(route.query, size.value)
-    const data = await getProductPage(params)
+    const data = await searchProducts(params)
+    if (sequence !== requestSequence) return
     products.value = data.records || []
     total.value = data.total || 0
-  } catch {
+  } catch (error) {
+    if (sequence !== requestSequence) return
     products.value = []
     total.value = 0
+    loadError.value = error.response?.data?.message || error.message || '搜索服务暂时不可用，请稍后重试'
   } finally {
-    loading.value = false
+    if (sequence === requestSequence) loading.value = false
   }
 }
 </script>
@@ -990,6 +1031,12 @@ async function fetchProducts() {
   padding: $space-xl 0;
 }
 
+.search-window-hint {
+  color: $color-text-secondary;
+  text-align: center;
+  font-size: $font-size-sm;
+}
+
 .loading-wrap {
   padding-top: 2px;
 }
@@ -1048,6 +1095,11 @@ async function fetchProducts() {
     flex-direction: column;
     gap: 8px;
     padding-top: 14px;
+  }
+
+  .filter-chips {
+    width: 100%;
+    flex: initial;
   }
 
   .filter-label {

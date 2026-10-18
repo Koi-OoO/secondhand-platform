@@ -2,12 +2,14 @@ package com.secondhand;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 后端应用启动入口。
  */
-@SpringBootApplication
+// ES 客户端由 ElasticsearchConfig 显式管理，避免引入依赖后 Boot 自动建立额外连接池。
+@SpringBootApplication(exclude = ElasticsearchRestClientAutoConfiguration.class)
 @EnableScheduling
 public class SecondhandPlatformApplication {
 
