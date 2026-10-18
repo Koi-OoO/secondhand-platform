@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.secondhand.entity.Product;
 import java.math.BigDecimal;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * 商品数据访问接口
@@ -16,6 +18,17 @@ import org.apache.ibatis.annotations.Update;
  */
 @Mapper
 public interface ProductMapper extends BaseMapper<Product> {
+
+    /** 固定本次导入上界，防止持续新增商品使全量扫描无法结束。 */
+    @Select("SELECT MAX(id) FROM product")
+    Long selectMaxId();
+
+    /** 按主键游标扫描，避免 OFFSET 分页在大表上的重复扫描。 */
+    @Select("SELECT * FROM product WHERE id > #{afterId} AND id <= #{maxId} ORDER BY id ASC LIMIT #{limit}")
+    List<Product> selectSearchBatch(@Param("afterId") long afterId, @Param("maxId") long maxId, @Param("limit") int limit);
+
+    /** 根据搜索命中 ID 批量读取当前展示字段；实际结果顺序由搜索服务恢复。 */
+    List<Product> selectSearchDetailsByIds(@Param("productIds") List<Long> productIds);
 
     /**
      * 分页查询商品详情列表

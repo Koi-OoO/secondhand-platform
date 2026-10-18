@@ -18,6 +18,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -210,12 +211,10 @@ public class ProductServiceImpl implements ProductService {
             return Result.error("成色等级无效，需在 1 到 4 之间");
         }
 
-        // 分类存在性校验
-        if (product.getCategoryId() != null) {
-            Category category = categoryMapper.selectById(product.getCategoryId());
-            if (category == null) {
-                return Result.error("所选分类不存在");
-            }
+        // 新商品必须选择具体分类，避免整机与配件继续混在同一大类中。
+        Result categoryValidation = validateCategory(product.getCategoryId(), null, true);
+        if (categoryValidation != null) {
+            return categoryValidation;
         }
 
         // 交易地点校验（可选，但填写的话不能为空白）
@@ -276,7 +275,7 @@ public class ProductServiceImpl implements ProductService {
         }
 
         // ========== 3. 字段合法性校验 ==========
-        Result validation = validateProductUpdate(product);
+        Result validation = validateProductUpdate(product, existing.getCategoryId());
         if (validation != null) {
             return validation;
         }
@@ -308,6 +307,7 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
+
         // ========== 7. 清理缓存 ==========
         cacheUtil.delete(PRODUCT_CACHE_KEY + product.getId());
         redisTemplate.delete(PRODUCT_CACHE_KEY + product.getId());
@@ -319,7 +319,7 @@ public class ProductServiceImpl implements ProductService {
     /**
      * 校验商品编辑请求参数
      */
-    private Result validateProductUpdate(Product product) {
+    private Result validateProductUpdate(Product product, Integer originalCategoryId) {
         // 标题校验
         if (product.getTitle() != null) {
             int titleLength = product.getTitle().trim().length();
@@ -340,12 +340,9 @@ public class ProductServiceImpl implements ProductService {
                 && (product.getConditionLevel() < 1 || product.getConditionLevel() > 4)) {
             return Result.error("成色等级无效，需在 1 到 4 之间");
         }
-        // 分类存在性校验
-        if (product.getCategoryId() != null) {
-            Category category = categoryMapper.selectById(product.getCategoryId());
-            if (category == null) {
-                return Result.error("所选分类不存在");
-            }
+        Result categoryValidation = validateCategory(product.getCategoryId(), originalCategoryId, false);
+        if (categoryValidation != null) {
+            return categoryValidation;
         }
 
         // 图片列表校验
@@ -364,6 +361,27 @@ public class ProductServiceImpl implements ProductService {
             }
         }
         return null;  // 校验通过
+    }
+
+    /**
+     * 新发布或更换分类要求叶子分类；旧商品可以保留原分类，兼容分类细分前的数据。
+     * 编辑请求省略分类表示不修改，由 MyBatis 保留原值。
+     */
+    private Result validateCategory(Integer categoryId, Integer originalCategoryId, boolean required) {
+        if (categoryId == null) {
+            return required ? Result.error("请选择商品分类") : null;
+        }
+        Category category = categoryMapper.selectById(categoryId);
+        if (category == null) {
+            return Result.error("所选分类不存在");
+        }
+        if (!required && Objects.equals(categoryId, originalCategoryId)) {
+            return null;
+        }
+        if (!categoryMapper.selectByParentId(categoryId).isEmpty()) {
+            return Result.error("请选择具体子分类");
+        }
+        return null;
     }
 
     /**
@@ -508,6 +526,7 @@ public class ProductServiceImpl implements ProductService {
         product.setStatus(4);
         product.setUpdateTime(new Date());
         productMapper.updateById(product);
+
 
         cacheUtil.delete(PRODUCT_CACHE_KEY + productId);
         redisTemplate.delete(PRODUCT_CACHE_KEY + productId);

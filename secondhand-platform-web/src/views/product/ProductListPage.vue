@@ -65,9 +65,32 @@
             :key="cat.id"
             type="button"
             class="chip"
-            :class="{ 'chip--active': currentCategory === cat.id }"
+            :class="{ 'chip--active': categorySelection.root?.id === cat.id }"
+            :aria-pressed="categorySelection.root?.id === cat.id"
             @click="selectCategory(cat.id)"
           >{{ cat.name }}</button>
+        </div>
+      </div>
+
+      <div v-if="categorySelection.children.length" class="filter-block">
+        <span class="filter-label">细分</span>
+        <div class="filter-chips" aria-label="商品子分类">
+          <button
+            type="button"
+            class="chip chip--sm"
+            :class="{ 'chip--active': currentCategory === categorySelection.root.id }"
+            :aria-pressed="currentCategory === categorySelection.root.id"
+            @click="selectCategory(categorySelection.root.id)"
+          >全部{{ categorySelection.root.name }}</button>
+          <button
+            v-for="child in categorySelection.children"
+            :key="child.id"
+            type="button"
+            class="chip chip--sm"
+            :class="{ 'chip--active': currentCategory === child.id }"
+            :aria-pressed="currentCategory === child.id"
+            @click="selectCategory(child.id)"
+          >{{ child.name }}</button>
         </div>
       </div>
 
@@ -111,13 +134,13 @@
               min="0"
             />
             <button class="price-apply" type="button" @click="applyPriceFilter">确定</button>
-            <button v-if="minPrice || maxPrice" class="price-reset" type="button" @click="resetPrice">重置</button>
+            <button v-if="hasPrice(minPrice) || hasPrice(maxPrice)" class="price-reset" type="button" @click="resetPrice">重置</button>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="result-bar">
+    <section v-if="!loadError" class="result-bar">
       <div>
         <strong>{{ total }}</strong>
         <span>件商品</span>
@@ -159,7 +182,13 @@
     </div>
 
     <template v-else>
-      <div v-if="products.length" class="product-grid">
+      <div v-if="loadError" class="empty-state" role="alert">
+        <p class="empty-text">商品加载失败</p>
+        <p class="empty-hint">{{ loadError }}</p>
+        <button type="button" class="price-apply" @click="fetchProducts">重新加载</button>
+      </div>
+
+      <div v-else-if="products.length" class="product-grid">
         <ProductCard
           v-for="item in products"
           :key="item.id"
@@ -175,16 +204,19 @@
       </div>
     </template>
 
-    <div v-if="total > size" class="pagination-wrap">
+    <div v-if="!loading && !loadError && total > size" class="pagination-wrap">
       <el-pagination
         v-model:current-page="page"
         :page-size="size"
-        :total="total"
+        :total="Math.min(total, 10000)"
         layout="prev, pager, next"
         background
         @current-change="handlePageChange"
       />
     </div>
+    <p v-if="!loading && !loadError && total > 10000" class="search-window-hint">
+      结果较多，最多浏览前 10000 件商品，请缩小筛选范围。
+    </p>
   </div>
 </template>
 
@@ -193,8 +225,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { getCategories } from '@/api/category'
-import { getProductPage } from '@/api/product'
+import { searchProducts } from '@/api/product'
 import { CONDITION } from '@/utils/constant'
+import { resolveCategory } from '@/utils/categoryTree'
 import ProductCard from '@/components/common/ProductCard.vue'
 
 const route = useRoute()
@@ -203,6 +236,9 @@ const router = useRouter()
 const categories = ref([])
 const products = ref([])
 const loading = ref(false)
+const loadError = ref('')
+// 只接受最后一次请求的结果，防止连续切换筛选时旧结果覆盖新结果。
+let requestSequence = 0
 const page = ref(1)
 // 宽屏每行 5 件，每页 20 件，完整页显示 4 行。
 const size = ref(20)
@@ -226,10 +262,9 @@ const sortOptions = [
   { label: '高价', value: 'price_desc' }
 ]
 
-const currentCategoryName = computed(() => {
-  if (currentCategory.value <= 0) return ''
-  return categories.value.find(cat => cat.id === currentCategory.value)?.name || ''
-})
+// URL 中仅保存实际筛选分类 ID，父类高亮与子类按钮从分类树恢复。
+const categorySelection = computed(() => resolveCategory(categories.value, currentCategory.value))
+const currentCategoryName = computed(() => categorySelection.value.label)
 
 const activeFilters = computed(() => {
   const r = []
@@ -248,15 +283,15 @@ const activeFilters = computed(() => {
   if (conditionFilter.value > 0) {
     r.push({
       label: CONDITION[conditionFilter.value],
-      remove: () => { conditionFilter.value = 0; fetchProducts() }
+      remove: () => toggleCondition(0)
     })
   }
-  if (minPrice.value || maxPrice.value) {
-    const lo = minPrice.value ? `¥${minPrice.value}` : '¥0'
-    const hi = maxPrice.value ? `¥${maxPrice.value}` : ''
+  if (hasPrice(minPrice.value) || hasPrice(maxPrice.value)) {
+    const lo = hasPrice(minPrice.value) ? `¥${minPrice.value}` : '¥0'
+    const hi = hasPrice(maxPrice.value) ? `¥${maxPrice.value}` : ''
     r.push({
       label: `${lo}${hi ? ' - ' + hi : '以上'}`,
-      remove: () => { minPrice.value = null; maxPrice.value = null; fetchProducts() }
+      remove: resetPrice
     })
   }
   return r
@@ -278,10 +313,20 @@ watch(
 )
 
 function syncFromQuery() {
-  currentCategory.value = route.query.categoryId ? Number(route.query.categoryId) : 0
+  const category = Number(route.query.categoryId)
+  currentCategory.value = Number.isInteger(category) && category > 0 ? category : 0
   keyword.value = typeof route.query.keyword === 'string' ? route.query.keyword : ''
-  sort.value = route.query.sort || 'latest'
-  page.value = route.query.page ? Number(route.query.page) : 1
+  sort.value = ['relevance', 'latest', 'hottest', 'price_asc', 'price_desc'].includes(route.query.sort) ? route.query.sort : 'latest'
+  const currentPage = Number(route.query.page)
+  page.value = Number.isInteger(currentPage) && currentPage > 0 ? currentPage : 1
+  const condition = Number(route.query.conditionLevel)
+  conditionFilter.value = [1, 2, 3, 4].includes(condition) ? condition : 0
+  minPrice.value = typeof route.query.minPrice === 'string' ? route.query.minPrice : null
+  maxPrice.value = typeof route.query.maxPrice === 'string' ? route.query.maxPrice : null
+}
+
+function hasPrice(value) {
+  return value !== null && value !== undefined && value !== ''
 }
 
 function loadHistory() {
@@ -328,7 +373,7 @@ function selectCategory(id) {
 function toggleCondition(val) {
   conditionFilter.value = val === conditionFilter.value ? 0 : val
   page.value = 1
-  fetchProducts()
+  syncQueryToUrl()
 }
 
 function applySearch() {
@@ -340,7 +385,7 @@ function applySearch() {
 
 function applyPriceFilter() {
   page.value = 1
-  fetchProducts()
+  syncQueryToUrl()
 }
 
 function syncQueryToUrl() {
@@ -349,14 +394,19 @@ function syncQueryToUrl() {
   if (keyword.value && keyword.value.trim()) q.keyword = keyword.value.trim()
   if (sort.value !== 'latest') q.sort = sort.value
   if (page.value > 1) q.page = page.value
-  router.replace({ query: q })
+  if (conditionFilter.value > 0) q.conditionLevel = conditionFilter.value
+  if (hasPrice(minPrice.value)) q.minPrice = minPrice.value
+  if (hasPrice(maxPrice.value)) q.maxPrice = maxPrice.value
+  // URL 变化由 watch 发起一次请求；相同条件再次搜索也需要刷新结果。
+  if (router.resolve({ query: q }).fullPath === route.fullPath) fetchProducts()
+  else router.replace({ query: q })
 }
 
 function resetPrice() {
   minPrice.value = null
   maxPrice.value = null
   page.value = 1
-  fetchProducts()
+  syncQueryToUrl()
 }
 
 function changeSort(val) {
@@ -368,7 +418,6 @@ function changeSort(val) {
 function handlePageChange(val) {
   page.value = val
   syncQueryToUrl()
-  fetchProducts()
 }
 
 async function fetchCategories() {
@@ -378,7 +427,9 @@ async function fetchCategories() {
 }
 
 async function fetchProducts() {
+  const sequence = ++requestSequence
   loading.value = true
+  loadError.value = ''
   try {
     const params = {
       page: page.value,
@@ -388,16 +439,25 @@ async function fetchProducts() {
     if (currentCategory.value > 0) params.categoryId = currentCategory.value
     if (keyword.value) params.keyword = keyword.value
     if (conditionFilter.value > 0) params.conditionLevel = conditionFilter.value
-    if (minPrice.value) params.minPrice = minPrice.value
-    if (maxPrice.value) params.maxPrice = maxPrice.value
-    const data = await getProductPage(params)
+    if (hasPrice(minPrice.value)) params.minPrice = minPrice.value
+    if (hasPrice(maxPrice.value)) params.maxPrice = maxPrice.value
+    if ([params.minPrice, params.maxPrice].some(value => hasPrice(value) && (!Number.isFinite(Number(value)) || Number(value) < 0))) {
+      throw new Error('价格请输入大于或等于 0 的数字')
+    }
+    if (hasPrice(params.minPrice) && hasPrice(params.maxPrice) && Number(params.minPrice) > Number(params.maxPrice)) {
+      throw new Error('最低价格不能高于最高价格')
+    }
+    const data = await searchProducts(params)
+    if (sequence !== requestSequence) return
     products.value = data.records || []
     total.value = data.total || 0
-  } catch {
+  } catch (error) {
+    if (sequence !== requestSequence) return
     products.value = []
     total.value = 0
+    loadError.value = error.response?.data?.message || error.message || '搜索服务暂时不可用，请稍后重试'
   } finally {
-    loading.value = false
+    if (sequence === requestSequence) loading.value = false
   }
 }
 </script>
@@ -1005,6 +1065,12 @@ async function fetchProducts() {
   padding: $space-xl 0;
 }
 
+.search-window-hint {
+  color: $color-text-secondary;
+  text-align: center;
+  font-size: $font-size-sm;
+}
+
 .loading-wrap {
   padding-top: 2px;
 }
@@ -1063,6 +1129,11 @@ async function fetchProducts() {
     flex-direction: column;
     gap: 8px;
     padding-top: 14px;
+  }
+
+  .filter-chips {
+    width: 100%;
+    flex: initial;
   }
 
   .filter-label {

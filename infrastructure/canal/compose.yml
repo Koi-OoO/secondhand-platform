@@ -1,0 +1,40 @@
+name: campus-search
+services:
+  canal:
+    image: canal/canal-server:v1.1.8
+    container_name: canal
+    restart: unless-stopped
+    mem_limit: 1536m
+    ports:
+      # 仅允许本机 Java 连接，不向局域网发布 Canal 的 TCP / 管理端口。
+      - "127.0.0.1:11111:11111"
+    environment:
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+      canal.destinations: campus
+      canal.serverMode: tcp
+      canal.instance.global.spring.xml: classpath:spring/file-instance.xml
+      canal.instance.master.address: "${CANAL_MYSQL_HOST:-host.docker.internal}:${CANAL_MYSQL_PORT:-3306}"
+      canal.instance.mysql.slaveId: "12345"
+      canal.instance.dbUsername: "${CANAL_MYSQL_USERNAME:-canal_campus}"
+      canal.instance.dbPassword: "${CANAL_MYSQL_PASSWORD:?请先在 infrastructure/canal/.env 中填写专用 MySQL 账号密码}"
+      # 环境变量直接进入 Java 配置，不经过 properties 文件转义；这里只需一个反斜杠。
+      canal.instance.filter.regex: 'secondhand\.(product|product_image|category)'
+      # TSDB 初始化会先枚举库再筛选表；提前跳过其他库，避免要求系统库读取权限。
+      canal.instance.filter.black.regex: '^(?!secondhand\.).*'
+      canal.instance.binlog.format: ROW
+      canal.instance.binlog.image: FULL
+      canal.instance.parser.parallel: "false"
+      canal.auto.reset.latest.pos.mode: "false"
+    volumes:
+      # 保留完整 conf，包含 file-instance 的消费位点、TSDB 和实例配置。
+      - canal_conf:/home/admin/canal-server/conf
+      - canal_logs:/home/admin/canal-server/logs
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/11111'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+volumes:
+  canal_conf:
+  canal_logs:
