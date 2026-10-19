@@ -25,8 +25,8 @@ class ProductSearchSyncWriterTest {
         when(products.selectBatchIds(anyCollection())).thenReturn(List.of(ProductSearchDocumentFactoryTest.product()));
         when(images.selectByProductIds(anyList())).thenReturn(List.of());
         when(client.bulk(any(BulkRequest.class))).thenReturn(new BulkResponse.Builder().took(1).errors(false)
-                .items(i -> i.operationType(OperationType.Index).index("campus_products_v2").id("1").status(200))
-                .items(i -> i.operationType(OperationType.Delete).index("campus_products_v2").id("2").status(404)).build());
+                .items(i -> i.operationType(OperationType.Index).index("campus_products").id("1").status(200))
+                .items(i -> i.operationType(OperationType.Delete).index("campus_products").id("2").status(404)).build());
         writer.apply(new CanalChangeDecoder.ChangePlan(new LinkedHashSet<>(List.of(1L, 2L)), false));
         ArgumentCaptor<BulkRequest> request = ArgumentCaptor.forClass(BulkRequest.class);
         verify(client).bulk(request.capture());
@@ -40,7 +40,7 @@ class ProductSearchSyncWriterTest {
         when(categories.selectList(null)).thenReturn(List.of());
         when(images.selectByProductIds(anyList())).thenReturn(List.of());
         when(client.bulk(any(BulkRequest.class))).thenReturn(new BulkResponse.Builder().took(1).errors(false)
-                .items(i -> i.operationType(OperationType.Delete).index("campus_products_v2").id("1").status(500)).build());
+                .items(i -> i.operationType(OperationType.Delete).index("campus_products").id("1").status(500)).build());
         assertThatThrownBy(() -> writer.apply(new CanalChangeDecoder.ChangePlan(Set.of(1L), false)))
                 .hasMessageContaining("同步");
     }
@@ -55,7 +55,7 @@ class ProductSearchSyncWriterTest {
         when(categories.selectList(null)).thenReturn(List.of());
         when(images.selectByProductIds(anyList())).thenReturn(List.of());
         when(client.bulk(any(BulkRequest.class))).thenReturn(new BulkResponse.Builder().took(1).errors(false)
-                .items(i -> i.operationType(OperationType.Delete).index("campus_products_v2").id("1").status(200)).build());
+                .items(i -> i.operationType(OperationType.Delete).index("campus_products").id("1").status(200)).build());
         writer.apply(new CanalChangeDecoder.ChangePlan(Set.of(), true));
         verify(products).selectSearchBatch(1, 2, 200);
         verify(client).bulk(any(BulkRequest.class));

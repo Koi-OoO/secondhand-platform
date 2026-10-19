@@ -87,7 +87,7 @@ class ElasticsearchLiveTest {
             ElasticsearchClient client = context.getBean(ElasticsearchClient.class);
             assertThat(client.indices().exists(builder -> builder.index(properties.getIndexName())).value()).isTrue();
             assertThat(context.getBean(ProductSearchIndexInitializer.class).initialize()).isFalse();
-            System.out.println("真实 Spring Boot：启用 ES 自动创建/验证 campus_products_v2，重复初始化不重建。");
+            System.out.println("真实 Spring Boot：启用 ES 自动创建/验证 campus_products，重复初始化不重建。");
         } catch (java.io.IOException ex) {
             throw new IllegalStateException(ex);
         }

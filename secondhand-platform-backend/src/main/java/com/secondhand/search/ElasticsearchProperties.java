@@ -14,7 +14,7 @@ public class ElasticsearchProperties {
     private boolean enabled;
     private boolean importOnStartup;
     private String url = "http://127.0.0.1:9200";
-    private String indexName = "campus_products_v2";
+    private String indexName = "campus_products";
     private int connectTimeoutMillis = 1000;
     private int socketTimeoutMillis = 5000;
     private String username = "";
