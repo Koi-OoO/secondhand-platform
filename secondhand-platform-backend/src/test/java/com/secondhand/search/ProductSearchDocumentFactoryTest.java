@@ -14,6 +14,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** 验证业务数据投影，避免价格精度、旧分类和封面在导入后发生变化。 */
 class ProductSearchDocumentFactoryTest {
+    @Test
+    void promotionAndInvoicePrefixesDoNotEraseTheMainProduct() {
+        for (String title : List.of("买一赠一 苹果手机", "附带原装发票的苹果手机", "苹果手机附带发票 256G")) {
+            Product p = product();
+            p.setTitle(title);
+            assertThat(new ProductSearchDocumentFactory().build(p, List.of(), categories()))
+                    .containsEntry("primaryTitle", title);
+        }
+    }
+
+    @Test
+    void primaryTitleExcludesGiftsWithoutChangingDisplayTitle() {
+        Product p = product();
+        p.setTitle("苹果 iPhone13 手机附赠充电器");
+        var document = new ProductSearchDocumentFactory().build(p, List.of(), categories());
+        assertThat(document).containsEntry("primaryTitle", "苹果 iPhone13 手机")
+                .containsEntry("title", "苹果 iPhone13 手机附赠充电器");
+    }
+
     private final ProductSearchDocumentFactory factory = new ProductSearchDocumentFactory();
 
     @Test

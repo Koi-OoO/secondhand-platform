@@ -39,7 +39,7 @@ class AiEsSearchLiveTest {
                     }
                 })).run("--server.address=127.0.0.1", "--server.port=0",
                         "--app.search.elasticsearch.enabled=true", "--app.search.elasticsearch.url=http://127.0.0.1:9200",
-                        "--app.search.elasticsearch.index-name=campus_products_v2",
+                        "--app.search.elasticsearch.index-name=campus_products",
                         "--app.search.elasticsearch.import-on-startup=false", "--app.search.canal.enabled=false",
                         "--mybatis-plus.configuration.log-impl=org.apache.ibatis.logging.nologging.NoLoggingImpl",
                         "--logging.level.root=WARN")) {
@@ -55,6 +55,18 @@ class AiEsSearchLiveTest {
             JsonNode external = json.readTree(get(base + "/product/search" + query, null).body()).path("data");
             assertThat(data).isEqualTo(external);
             assertThat(data.path("records").get(0).path("images").size()).isPositive();
+            JsonNode phones = json.readTree(get(base + "/internal/marketplace/listings/search?keyword="
+                    + java.net.URLEncoder.encode("苹果手机", StandardCharsets.UTF_8) + "&sort=latest", token).body()).path("data");
+            assertThat(phones.path("total").asLong()).isEqualTo(10);
+            for (JsonNode phone : phones.path("records")) {
+                assertThat(phone.path("title").asText()).contains("苹果").doesNotContain("充电器");
+                assertThat(phone.path("categoryName").asText()).isEqualTo("手机");
+            }
+            JsonNode chargers = json.readTree(get(base + "/internal/marketplace/listings/search?keyword="
+                    + java.net.URLEncoder.encode("苹果手机充电器", StandardCharsets.UTF_8), token).body()).path("data");
+            assertThat(chargers.path("total").asLong()).isEqualTo(10);
+            JsonNode model = json.readTree(get(base + "/internal/marketplace/listings/search?keyword=iPhone13", token).body()).path("data");
+            assertThat(model.path("total").asLong()).isEqualTo(10);
             JsonNode zeroBudget = json.readTree(get(base + "/internal/marketplace/listings/search?maxPrice=0", token).body());
             assertThat(zeroBudget.path("data").path("total").asLong()).isZero();
             assertThat(get(base + "/internal/marketplace/listings/search?page=1001&size=10", token).statusCode()).isEqualTo(400);

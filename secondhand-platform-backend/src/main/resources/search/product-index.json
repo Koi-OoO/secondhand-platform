@@ -1,24 +1,19 @@
 {
-  "settings": {
-    "number_of_shards": 1,
-    "number_of_replicas": 0
-  },
+  "settings": {"number_of_shards": 1, "number_of_replicas": 0},
   "mappings": {
     "dynamic": "strict",
-    "_meta": {
-      "managed_by": "secondhand-platform",
-      "schema_version": "2"
-    },
+    "_meta": { "managed_by": "secondhand-platform", "schema_version": "3" },
     "properties": {
       "id": { "type": "long" },
       "sellerId": { "type": "long" },
       "title": { "type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_smart" },
+      "primaryTitle": { "type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_smart" },
       "description": { "type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_smart" },
       "categoryId": { "type": "integer" },
       "categoryPathIds": { "type": "integer" },
       "priceCents": { "type": "long" },
       "originalPriceCents": { "type": "long" },
-      "stock": { "type": "integer" },
+      "stock": { "type": "long" },
       "conditionLevel": { "type": "byte" },
       "status": { "type": "byte" },
       "viewCount": { "type": "long" },

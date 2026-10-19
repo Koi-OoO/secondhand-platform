@@ -82,7 +82,7 @@ public class ProductSearchIndexInitializer implements ApplicationRunner {
     }
 
     private CreateIndexRequest loadDefinition() throws IOException {
-        String definition = "/search/product-index-v2.json";
+        String definition = "/search/product-index.json";
         try (InputStream input = getClass().getResourceAsStream(definition)) {
             if (input == null) throw new IllegalStateException("商品索引定义文件缺失");
             return new CreateIndexRequest.Builder().index(properties.getIndexName()).withJson(input).build();

@@ -14,16 +14,22 @@ public final class ProductKeywordQuery {
     public static final class Plan {
         private final List<List<String>> requiredGroups;
         private final List<String> excludedTerms;
+        private final boolean structured;
+        private final int primaryGroupCount;
 
-        private Plan(List<List<String>> groups, List<String> excluded) {
+        private Plan(List<List<String>> groups, List<String> excluded, boolean structured, int primaryGroupCount) {
             this.requiredGroups = List.copyOf(groups);
             this.excludedTerms = List.copyOf(excluded);
+            this.structured = structured;
+            this.primaryGroupCount = primaryGroupCount;
         }
 
         /** 品牌、类型和剩余型号分别形成一个必须满足的匹配组。 */
         public List<List<String>> getRequiredGroups() { return requiredGroups; }
         /** 查询整机时排除明确的配件主商品名称。 */
         public List<String> getExcludedTerms() { return excludedTerms; }
+        public boolean isStructured() { return structured; }
+        public int getPrimaryGroupCount() { return primaryGroupCount; }
     }
 
     /** 品牌的中英文名称与常见品牌专属产品名称。 */
@@ -81,6 +87,7 @@ public final class ProductKeywordQuery {
                 break;
             }
         }
+        boolean structured = kind != null || !groups.isEmpty();
         if (kind != null) {
             groups.add(kind.titleTerms);
             for (String term : kind.queryTerms) remainder = remainder.replace(term, " ");
@@ -89,6 +96,7 @@ public final class ProductKeywordQuery {
                 remainder = remainder.replace("手机", " ").replace("智能", " ");
             }
         }
+        int primaryGroupCount = groups.size();
         if (kind == null && groups.isEmpty()) {
             // 普通教材等连续中文关键词仍完整保留。
             for (String term : remainder.split("\\s+")) groups.add(List.of(term));
@@ -97,13 +105,30 @@ public final class ProductKeywordQuery {
             while (terms.find()) {
                 String term = terms.group();
                 // 常见专业版在中英文标题中使用不同表示。
-                if (term.equals("pro")) groups.add(List.of("pro", "专业"));
+                if (term.equals("pro")) groups.add(primaryGroupCount++, List.of("pro", "专业"));
                 else if (term.matches("[0-9]{1,2}") && Integer.parseInt(term) >= 1 && Integer.parseInt(term) <= 30)
-                    groups.add(List.of(term, chineseNumber(Integer.parseInt(term))));
+                    groups.add(primaryGroupCount++, List.of(term, chineseNumber(Integer.parseInt(term))));
                 else groups.add(List.of(term));
             }
         }
-        return new Plan(groups, kind == null ? List.of() : kind.excluded);
+        return new Plan(groups, kind == null ? List.of() : kind.excluded, structured, primaryGroupCount);
+    }
+
+    /** 赠品不决定主商品类型；原始标题仍用于展示，不修改商品数据。 */
+    public static String primaryTitle(String title) {
+        if (title == null) return null;
+        int end = title.length();
+        for (String marker : List.of("附赠", "附带", "赠送", "赠")) {
+            int position = title.indexOf(marker);
+            if (position <= 0) continue;
+            String before = title.substring(0, position).toLowerCase(Locale.ROOT);
+            String after = title.substring(position + marker.length()).toLowerCase(Locale.ROOT);
+            // 两侧均有明确商品类型时才把后半段视作赠品，不截断“买一赠一”或发票说明。
+            boolean mainProduct = KINDS.stream().anyMatch(k -> k.queryTerms.stream().anyMatch(before::contains));
+            boolean giftProduct = KINDS.stream().anyMatch(k -> k.queryTerms.stream().anyMatch(after::contains));
+            if (mainProduct && giftProduct) end = Math.min(end, position);
+        }
+        return title.substring(0, end).trim();
     }
 
     /** 支持“iPhone13”匹配模拟数据中“第十三代”的相同型号。 */

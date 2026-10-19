@@ -88,7 +88,7 @@ app:
       # 仅初始化数据时显式开启；导入成功后关闭，避免每次重启全量扫描。
       import-on-startup: ${PRODUCT_SEARCH_ES_IMPORT_ON_STARTUP:false}
       url: ${PRODUCT_SEARCH_ES_URL:http://127.0.0.1:9200}
-      index-name: ${PRODUCT_SEARCH_ES_INDEX:campus_products_v2}
+      index-name: ${PRODUCT_SEARCH_ES_INDEX:campus_products}
       connect-timeout-millis: ${PRODUCT_SEARCH_ES_CONNECT_TIMEOUT_MS:1000}
       socket-timeout-millis: ${PRODUCT_SEARCH_ES_SOCKET_TIMEOUT_MS:5000}
       username: ${PRODUCT_SEARCH_ES_USERNAME:}

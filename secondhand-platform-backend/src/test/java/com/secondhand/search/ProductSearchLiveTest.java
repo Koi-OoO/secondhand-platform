@@ -141,12 +141,12 @@ class ProductSearchLiveTest {
     void explicitlyInitializeFormalIndexFromCurrentDatabase() throws Exception {
         String endpoint = System.getenv("CAMPUS_ES_URL");
         assertThat(URI.create(endpoint).getHost()).isIn("localhost", "127.0.0.1", "::1", "[::1]");
-        try (ConfigurableApplicationContext context = application(true, endpoint, "campus_products_v2", true)) {
+        try (ConfigurableApplicationContext context = application(true, endpoint, "campus_products", true)) {
             long expected = context.getBean(ProductMapper.class).selectCount(null);
-            long actual = context.getBean(ElasticsearchClient.class).count(count -> count.index("campus_products_v2")).count();
+            long actual = context.getBean(ElasticsearchClient.class).count(count -> count.index("campus_products")).count();
             assertThat(actual).isEqualTo(expected);
             assertThat(get(base(context) + "/product/search?size=20", 200).path("code").asInt()).isEqualTo(200);
-            System.out.println("正式 campus_products_v2 导入并通过 HTTP 查询验证：" + actual + " 条；未修改 MySQL。");
+            System.out.println("正式 campus_products 导入并通过 HTTP 查询验证：" + actual + " 条；未修改 MySQL。");
         }
     }
 

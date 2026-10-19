@@ -60,7 +60,7 @@ class ElasticsearchFoundationTest {
         ElasticsearchProperties p = startServer();
         try (ElasticsearchTransport transport = new ElasticsearchConfig().elasticsearchTransport(p)) {
             new ProductSearchIndexInitializer(new ElasticsearchClient(transport), p).initialize();
-            assertThat(createdBody.at("/mappings/_meta/schema_version").asText()).isEqualTo("2");
+            assertThat(createdBody.at("/mappings/_meta/schema_version").asText()).isEqualTo("3");
             assertThat(createdBody.at("/mappings/properties/title/analyzer").asText()).isEqualTo("ik_max_word");
             assertThat(createdBody.at("/mappings/properties/title/search_analyzer").asText()).isEqualTo("ik_smart");
             assertThat(createdBody.at("/mappings/properties/description/search_analyzer").asText()).isEqualTo("ik_smart");
@@ -106,7 +106,7 @@ class ElasticsearchFoundationTest {
         p.setUrl("http://localhost:9200");
         p.setIndexName("Bad Index");
         assertThatThrownBy(p::validate).isInstanceOf(IllegalArgumentException.class);
-        p.setIndexName("campus_products_v2");
+        p.setIndexName("campus_products");
         p.setSocketTimeoutMillis(0);
         assertThatThrownBy(p::validate).isInstanceOf(IllegalArgumentException.class);
         p.setSocketTimeoutMillis(5000);
@@ -144,7 +144,7 @@ class ElasticsearchFoundationTest {
             assertThat(createdBody.at("/mappings/properties/priceCents/type").asText()).isEqualTo("long");
             assertThat(createdBody.at("/mappings/properties/categoryPathIds/type").asText()).isEqualTo("integer");
             assertThat(createdBody.at("/mappings/properties/createTime/format").asText()).isEqualTo("epoch_millis");
-            assertThat(requests).contains("POST /_analyze", "PUT /campus_products_v2");
+            assertThat(requests).contains("POST /_analyze", "PUT /campus_products");
             assertThat(requests.stream().noneMatch(item -> item.startsWith("DELETE"))).isTrue();
         }
     }
@@ -155,7 +155,7 @@ class ElasticsearchFoundationTest {
         exists = true;
         try (ElasticsearchTransport transport = new ElasticsearchConfig().elasticsearchTransport(p)) {
             assertThat(new ProductSearchIndexInitializer(new ElasticsearchClient(transport), p).initialize()).isFalse();
-            assertThat(requests).contains("GET /campus_products_v2/_mapping");
+            assertThat(requests).contains("GET /campus_products/_mapping");
             assertThat(requests.stream().noneMatch(item -> item.startsWith("PUT") || item.startsWith("DELETE"))).isTrue();
         }
     }
@@ -233,7 +233,7 @@ class ElasticsearchFoundationTest {
                 return;
             } else if (method.equals("GET") && path.endsWith("/_mapping")) {
                 JsonNode mapping = json.readTree(getClass().getResourceAsStream(
-                        "/search/product-index-v2.json")).get("mappings");
+                        "/search/product-index.json")).get("mappings");
                 if (legacyMapping) ((ObjectNode) mapping.path("_meta")).put("schema_version", "1");
                 if (wrongSearchAnalyzer) {
                     ((ObjectNode) mapping.path("properties").path("title")).put("search_analyzer", "standard");
@@ -250,7 +250,7 @@ class ElasticsearchFoundationTest {
             } else if (method.equals("PUT")) {
                 createdBody = json.readTree(exchange.getRequestBody());
                 exists = true;
-                response = Map.of("acknowledged", true, "shards_acknowledged", true, "index", "campus_products_v2");
+                response = Map.of("acknowledged", true, "shards_acknowledged", true, "index", "campus_products");
             } else {
                 status = 404;
                 response = Map.of("error", Map.of("type", "not_found", "reason", "unexpected request"), "status", 404);

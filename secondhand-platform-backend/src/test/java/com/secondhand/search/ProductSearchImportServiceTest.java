@@ -50,7 +50,7 @@ class ProductSearchImportServiceTest {
         assertThat(request.getAllValues()).allSatisfy(bulk -> {
             assertThat(bulk.operations()).hasSize(1);
             assertThat(bulk.operations().get(0).index().id()).isEqualTo("1");
-            assertThat(bulk.operations().get(0).index().index()).isEqualTo("campus_products_v2");
+            assertThat(bulk.operations().get(0).index().index()).isEqualTo("campus_products");
         });
         verify(initializer, times(2)).initialize();
         verify(products, never()).insert(any());
@@ -78,7 +78,7 @@ class ProductSearchImportServiceTest {
 
     private BulkResponse response(boolean errors, int status, boolean itemError) {
         BulkResponseItem.Builder item = new BulkResponseItem.Builder().operationType(OperationType.Index)
-                .index("campus_products_v2").id("1").status(status);
+                .index("campus_products").id("1").status(status);
         if (itemError) item.error(error -> error.type("mapper_parsing_exception").reason("invalid"));
         return new BulkResponse.Builder().took(1).errors(errors).items(item.build()).build();
     }

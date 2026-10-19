@@ -4,7 +4,7 @@
 
 ## 配置
 
-IK 升级已完成：正式索引为 `campus_products_v2`，已完成316条商品导入、真实搜索和 Canal 增量验收；原磁盘水位阻塞已解除，默认磁盘保护保持启用。运行配置见 [README-ik.md](README-ik.md)。
+IK 升级已完成：正式索引为 `campus_products`，已完成316条商品导入、真实搜索和 Canal 增量验收；原磁盘水位阻塞已解除，默认磁盘保护保持启用。运行配置见 [README-ik.md](README-ik.md)。
 
 配置位于 `src/main/resources/application.yml` 的 `app.search.elasticsearch`，也可以通过 IDEA 运行配置的环境变量覆盖：
 
@@ -13,7 +13,7 @@ IK 升级已完成：正式索引为 `campus_products_v2`，已完成316条商�
 | `PRODUCT_SEARCH_ES_ENABLED` | `false` | 是否注册 ES 客户端并在启动时初始化索引 |
 | `PRODUCT_SEARCH_ES_IMPORT_ON_STARTUP` | `false` | 本次启动是否将 MySQL 商品全量导入 ES，需要同时启用 ES |
 | `PRODUCT_SEARCH_ES_URL` | `http://127.0.0.1:9200` | ES HTTP(S) 地址 |
-| `PRODUCT_SEARCH_ES_INDEX` | `campus_products_v2` | 当前 IK 版本的商品索引名 |
+| `PRODUCT_SEARCH_ES_INDEX` | `campus_products` | 当前 IK 版本的商品索引名 |
 | `PRODUCT_SEARCH_ES_CONNECT_TIMEOUT_MS` | `1000` | 建立连接及等待连接池的超时，毫秒 |
 | `PRODUCT_SEARCH_ES_SOCKET_TIMEOUT_MS` | `5000` | 读取响应超时，毫秒 |
 | `PRODUCT_SEARCH_ES_USERNAME` | 空 | 可选 Basic 用户名 |
@@ -68,7 +68,7 @@ ES 只返回命中 ID，再按 ES 顺序批量回查 MySQL 的商品、卖家展
 - `search/ProductSearchCriteria.java`、`ProductSearchService.java`：搜索参数校验、ES 查询、MySQL 批量回查。
 - `controller/ProductSearchController.java`：公开 GET 搜索接口，局部处理400/503。
 - `config/ProductSearchConfig.java`：装配业务服务，显式开启时执行启动导入。
-- `resources/search/product-index-v2.json`：IK 索引设置及字段类型，类似 MySQL 建表结构。
+- `resources/search/product-index.json`：IK 索引设置及字段类型，类似 MySQL 建表结构。
 
 使用官方 Java API Client `8.19.19` 连接 ES `8.19.23`，客户端与服务端补丁版本可以不同，保持 8.19 系列。JSON API 显式选择 `2.1.3` 与 Parsson `1.1.9` 对齐。ES 使用独立的 Jackson mapper，不修改 Spring MVC 的日期格式；不引入 Spring Data Elasticsearch，也不升级 Spring Boot。
 
@@ -76,7 +76,7 @@ ES 只返回命中 ID，再按 ES 顺序批量回查 MySQL 的商品、卖家展
 
 ## 索引字段约定
 
-索引默认名 `campus_products_v2`，1 个主分片、0 个副本，适合当前本机单节点开发；生产副本规划应根据节点数确定。
+索引默认名 `campus_products`，1 个主分片、0 个副本，适合当前本机单节点开发；生产副本规划应根据节点数确定。
 
 | 字段 | ES 类型 | 用途 |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ $env:CAMPUS_ES_URL='http://127.0.0.1:9200'
 mvn '-Dtest=ElasticsearchLiveTest' test
 ```
 
-若还要验证实际 Spring Boot 开关，并创建/验证正式 `campus_products_v2` 索引，需要本机 MySQL、Redis 可用，再显式增加：
+若还要验证实际 Spring Boot 开关，并创建/验证正式 `campus_products` 索引，需要本机 MySQL、Redis 可用，再显式增加：
 
 ```powershell
 $env:CAMPUS_ES_INITIALIZE_PRODUCT_INDEX='true'
@@ -126,7 +126,7 @@ $env:CAMPUS_ES_PRODUCT_SEARCH_LIVE='true'
 mvn '-Dtest=ProductSearchLiveTest' test
 ```
 
-`CAMPUS_ES_IMPORT_FORMAL=true` 是额外的手动验证开关：只有同时开启上面的真实搜索测试时，才会执行写入正式 `campus_products_v2` 的验证。普通回归不设置它。业务初始化优先使用 IDEA 的 `PRODUCT_SEARCH_ES_IMPORT_ON_STARTUP`，无需运行测试写正式数据。
+`CAMPUS_ES_IMPORT_FORMAL=true` 是额外的手动验证开关：只有同时开启上面的真实搜索测试时，才会执行写入正式 `campus_products` 的验证。普通回归不设置它。业务初始化优先使用 IDEA 的 `PRODUCT_SEARCH_ES_IMPORT_ON_STARTUP`，无需运行测试写正式数据。
 
 上述变量只在当前 PowerShell 会话生效。所有真实测试均限制本机地址；临时测试索引只删除自己的随机名称，正式索引不会被清理。测试关闭自己启动的 Java 上下文，不停止用户的 Redis/ES 容器。
 

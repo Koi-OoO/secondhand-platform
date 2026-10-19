@@ -16,6 +16,7 @@ import com.secondhand.entity.ProductImage;
 import com.secondhand.mapper.CategoryMapper;
 import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
+import com.secondhand.util.ProductKeywordQuery;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -83,8 +84,33 @@ public class ProductSearchService {
         BoolQuery.Builder query = new BoolQuery.Builder()
                 .filter(filter -> filter.term(term -> term.field("status").value(1)));
         if (!c.keyword().isEmpty()) {
-            query.must(must -> must.multiMatch(match -> match.query(c.keyword())
-                    .fields("title^3", "description").operator(Operator.And)));
+            var plan = ProductKeywordQuery.parse(c.keyword());
+            if (plan.isStructured()) {
+                // 同组品牌别名为 OR，品牌/类型/型号各组为 AND，限制主标题以排除赠品干扰。
+                int groupIndex = 0;
+                for (List<String> group : plan.getRequiredGroups()) {
+                    boolean primaryGroup = groupIndex++ < plan.getPrimaryGroupCount();
+                    BoolQuery.Builder alternatives = new BoolQuery.Builder().minimumShouldMatch("1");
+                    for (String term : group) {
+                        if (primaryGroup) {
+                            alternatives.should(q -> q.matchPhrase(m -> m.field("primaryTitle")
+                                    .analyzer("ik_max_word").query(term)));
+                        } else {
+                            // 容量、健康度等剩余属性允许来自描述，不放松品牌与类型约束。
+                            alternatives.should(q -> q.multiMatch(m -> m.query(term)
+                                    .fields("primaryTitle^3", "description").operator(Operator.And)));
+                        }
+                    }
+                    query.must(alternatives.build()._toQuery());
+                }
+                for (String term : plan.getExcludedTerms()) {
+                    // 类型短语与写入分词保持一致，如“手机壳”在 IK smart/max 中切法不同。
+                    query.mustNot(q -> q.matchPhrase(m -> m.field("primaryTitle").analyzer("ik_max_word").query(term)));
+                }
+            } else {
+                query.must(must -> must.multiMatch(match -> match.query(c.keyword())
+                        .fields("title^3", "description").operator(Operator.And)));
+            }
         }
         if (c.categoryId() != null) {
             query.filter(filter -> filter.term(term -> term.field("categoryPathIds").value(c.categoryId())));

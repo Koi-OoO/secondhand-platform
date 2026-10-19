@@ -3,6 +3,7 @@ package com.secondhand.search;
 import com.secondhand.entity.Category;
 import com.secondhand.entity.Product;
 import com.secondhand.entity.ProductImage;
+import com.secondhand.util.ProductKeywordQuery;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,6 +28,7 @@ public class ProductSearchDocumentFactory {
         doc.put("id", product.getId());
         doc.put("sellerId", product.getSellerId());
         doc.put("title", product.getTitle());
+        doc.put("primaryTitle", ProductKeywordQuery.primaryTitle(product.getTitle()));
         doc.put("description", product.getDescription());
         doc.put("categoryId", product.getCategoryId());
         doc.put("categoryPathIds", categoryPath(product.getCategoryId(), categories));
