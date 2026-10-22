@@ -42,16 +42,16 @@ public class Order {
     @Schema(description = "运费金额", example = "0.00")
     private BigDecimal freight;
 
-    @Schema(description = "实付总金额", example = "1998.00")
+    @Schema(description = "订单总金额，不代表平台已收款", example = "1998.00")
     private BigDecimal totalAmount;
 
-    @Schema(description = "收货地址")
+    @Schema(description = "面交地点")
     private String address;
 
     @Schema(description = "快递单号")
     private String expressNo;
 
-    @Schema(description = "订单状态：1=待发货，2=待收货，3=已完成，4=已取消")
+    @Schema(description = "订单状态：1=待交付，2=待确认，3=已完成，4=已取消")
     private Integer status;
 
     @Schema(description = "买家视角是否隐藏：0=否，1=是", example = "0")
@@ -60,7 +60,7 @@ public class Order {
     @Schema(description = "卖家视角是否隐藏：0=否，1=是", example = "0")
     private Integer sellerDeleted;
 
-    @Schema(description = "取消类型：1=买家取消，2=卖家拒绝发货")
+    @Schema(description = "取消类型：1=买家取消，2=卖家拒绝交付")
     private Integer cancelType;
 
     @Schema(description = "取消或拒绝原因")
@@ -69,7 +69,7 @@ public class Order {
     @Schema(description = "支付时间", accessMode = Schema.AccessMode.READ_ONLY)
     private Date payTime;
 
-    @Schema(description = "发货时间", accessMode = Schema.AccessMode.READ_ONLY)
+    @Schema(description = "卖家确认交付时间", accessMode = Schema.AccessMode.READ_ONLY)
     private Date deliverTime;
 
     @Schema(description = "完成时间", accessMode = Schema.AccessMode.READ_ONLY)
@@ -93,4 +93,8 @@ public class Order {
     @TableField(exist = false)
     @Schema(description = "卖家昵称")
     private String sellerNickname;
+
+    @TableField(exist = false)
+    @Schema(description = "订单买家是否已评价，由服务端查询评价记录返回")
+    private Boolean evaluated = false;
 }

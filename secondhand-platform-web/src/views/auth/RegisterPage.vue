@@ -12,7 +12,7 @@
         <div class="visual-features">
           <div class="feat-item">
             <el-icon><CircleCheck /></el-icon>
-            <span>担保交易保障</span>
+            <span>校园面交交易</span>
           </div>
           <div class="feat-item">
             <el-icon><CircleCheck /></el-icon>

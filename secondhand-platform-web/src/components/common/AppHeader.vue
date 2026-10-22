@@ -52,11 +52,11 @@
       <div class="app-header__actions">
         <template v-if="userStore.isLoggedIn">
           <router-link v-if="pendingCount.toShip > 0" to="/user/orders?tab=sold" class="order-alert">
-            待发货 {{ displayCount(pendingCount.toShip) }}
+            待交付 {{ displayCount(pendingCount.toShip) }}
           </router-link>
 
           <router-link v-if="pendingCount.toConfirm > 0" to="/user/orders" class="order-alert order-alert--confirm">
-            待收货 {{ displayCount(pendingCount.toConfirm) }}
+            待确认 {{ displayCount(pendingCount.toConfirm) }}
           </router-link>
 
           <router-link to="/messages" class="message-alert" :class="{ 'message-alert--active': messageStore.unreadCount > 0 }">
@@ -147,7 +147,7 @@ const tickerItems = [
   '数码专区最低 3 折起',
   '面交请选择公共区域',
   '闲置换现金',
-  '支持担保交易',
+  '支持校园面交',
   '让好物继续流转',
   '本周成交 356 单'
 ]
@@ -239,7 +239,7 @@ async function pollPendingCount() {
     const shouldNotifyIncrease = lastToShip.value !== null && toShip > lastToShip.value
 
     if (shouldNotifyInitial || shouldNotifyIncrease) {
-      ElMessage.warning(`你有 ${toShip} 个订单等待发货`)
+      ElMessage.warning(`你有 ${toShip} 个订单等待交付`)
       sessionStorage.setItem(notifyKey, '1')
     }
     lastToShip.value = toShip
@@ -249,7 +249,7 @@ async function pollPendingCount() {
     const shouldConfirmIncrease = lastToConfirm.value !== null && toConfirm > lastToConfirm.value
 
     if (shouldConfirmInitial || shouldConfirmIncrease) {
-      ElMessage.info(`你有 ${toConfirm} 个订单等待收货完成`)
+      ElMessage.info(`你有 ${toConfirm} 个订单等待确认完成`)
       sessionStorage.setItem(confirmNotifyKey, '1')
     }
     lastToConfirm.value = toConfirm

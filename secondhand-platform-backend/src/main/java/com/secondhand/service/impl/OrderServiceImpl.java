@@ -9,6 +9,8 @@ import com.secondhand.entity.OrderBatchShipItem;
 import com.secondhand.entity.Product;
 import com.secondhand.entity.ProductImage;
 import com.secondhand.entity.User;
+import com.secondhand.entity.Evaluation;
+import com.secondhand.mapper.EvaluationMapper;
 import com.secondhand.mapper.OrderMapper;
 import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
@@ -54,6 +56,8 @@ public class OrderServiceImpl implements OrderService {
     private ProductImageMapper productImageMapper;
     @Autowired  // 注入用户Mapper
     private UserMapper userMapper;
+    @Autowired
+    private EvaluationMapper evaluationMapper;
     @Autowired  // 注入Redis模板
     private RedisTemplate<String, Object> redisTemplate;
     @Autowired  // 注入Redisson客户端（分布式锁）
@@ -78,9 +82,9 @@ public class OrderServiceImpl implements OrderService {
         if (quantity == null || quantity <= 0) {
             return Result.error("购买数量必须大于 0");
         }
-        // 校验收货地址
+        // 校验面交地点
         if (address == null || address.trim().isEmpty()) {
-            return Result.error("请填写收货地址");
+            return Result.error("请填写面交地点");
         }
         // 校验商品ID
         if (productId == null || productId <= 0) {
@@ -158,8 +162,8 @@ public class OrderServiceImpl implements OrderService {
         order.setProductAmount(productAmount);  // 商品金额
         order.setFreight(BigDecimal.ZERO);  // 运费（默认0）
         order.setTotalAmount(productAmount);  // 总金额
-        order.setAddress(address.trim());  // 收货地址
-        order.setStatus(1);  // 下单即进入待发货状态
+        order.setAddress(address.trim());  // 面交地点
+        order.setStatus(1);  // 下单即进入待交付状态
         order.setCreateTime(new Date());  // 创建时间
         orderMapper.insert(order);  // 保存订单
 
@@ -176,9 +180,9 @@ public class OrderServiceImpl implements OrderService {
         log.info("订单创建成功：订单号={} 买家ID={} 商品ID={} 数量={}",
                 orderNo, buyerId, productId, quantity);
 
-        // 通知卖家：有新订单待发货
+        // 通知卖家：有新订单待交付
         notificationService.notifyUser(product.getSellerId(), "order", "新订单",
-                "您有一笔新订单「" + product.getTitle() + "」，请尽快发货", order.getId());
+                "您有一笔新订单「" + product.getTitle() + "」，请尽快交付", order.getId());
         return Result.success("下单成功");
     }
 
@@ -310,9 +314,9 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getBuyerId().equals(userId)) {
             return Result.error("无权操作");
         }
-        // 订单状态不是待发货（1）
+        // 订单状态不是待交付（1）
         if (order.getStatus() != 1) {
-            return Result.error("仅待发货状态可取消");
+            return Result.error("仅待交付状态可取消");
         }
 
         // 更新订单状态为已取消
@@ -332,21 +336,21 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * 订单发货
+     * 订单交付
      */
     @Override
     @Transactional
     public Result shipOrder(Long sellerId, Long orderId, String expressNo) {
-        // 调用内部方法发货
+        // 调用内部方法交付
         String error = shipOrderInternal(sellerId, orderId, expressNo);
         if (error != null) {
             return Result.error(error);
         }
-        return Result.success("发货成功");
+        return Result.success("交付成功");
     }
 
     /**
-     * 批量发货
+     * 批量交付
      */
     @Override
     @Transactional
@@ -358,7 +362,7 @@ public class OrderServiceImpl implements OrderService {
             result.addFailure(null, "请至少选择一条订单");
             return Result.success(result);
         }
-        // 遍历发货项
+        // 遍历交付项
         for (OrderBatchShipItem item : items) {
             Long orderId = item == null ? null : item.getOrderId();
             String expressNo = item == null ? null : item.getExpressNo();
@@ -373,7 +377,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * 确认收货
+     * 确认收到
      */
     @Override
     @Transactional
@@ -388,9 +392,9 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getBuyerId().equals(buyerId)) {
             return Result.error("无权操作");
         }
-        // 订单状态不是待收货（2）
+        // 订单状态不是待确认（2）
         if (order.getStatus() != 2) {
-            return Result.error("仅待收货状态可确认");
+            return Result.error("仅待确认状态可确认");
         }
 
         // 更新订单状态为已完成
@@ -398,16 +402,16 @@ public class OrderServiceImpl implements OrderService {
         order.setFinishTime(new Date());  // 完成时间
         orderMapper.updateById(order);
 
-        log.info("订单已确认收货：订单号={}", order.getOrderNo());
+        log.info("订单已确认收到：订单号={}", order.getOrderNo());
 
-        // 通知卖家：买家已确认收货，交易完成
-        notificationService.notifyUser(order.getSellerId(), "order", "买家已确认收货",
+        // 通知卖家：买家已确认收到，交易完成
+        notificationService.notifyUser(order.getSellerId(), "order", "买家已确认收到",
                 "订单（" + order.getOrderNo() + "）已完成，交易达成", order.getId());
-        return Result.success("确认收货成功");
+        return Result.success("确认收到成功");
     }
 
     /**
-     * 拒绝发货
+     * 拒绝交付
      */
     @Override
     @Transactional
@@ -417,11 +421,11 @@ public class OrderServiceImpl implements OrderService {
         if (error != null) {
             return Result.error(error);
         }
-        return Result.success("已拒绝发货");
+        return Result.success("已拒绝交付");
     }
 
     /**
-     * 批量拒绝发货
+     * 批量拒绝交付
      */
     @Override
     @Transactional
@@ -445,20 +449,20 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public Result getPendingCount(Long userId) {
-        // 统计待发货数量（卖家视角，状态=1）
+        // 统计待交付数量（卖家视角，状态=1）
         LambdaQueryWrapper<Order> sellerWrapper = new LambdaQueryWrapper<>();
         sellerWrapper.eq(Order::getSellerId, userId).eq(Order::getStatus, 1);
         long toShip = orderMapper.selectCount(sellerWrapper);
 
-        // 统计待收货数量（买家视角，状态=2）
+        // 统计待确认数量（买家视角，状态=2）
         LambdaQueryWrapper<Order> buyerWrapper = new LambdaQueryWrapper<>();
         buyerWrapper.eq(Order::getBuyerId, userId).eq(Order::getStatus, 2);
         long toConfirm = orderMapper.selectCount(buyerWrapper);
 
         // 组装返回数据
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("toShip", toShip);  // 待发货数量
-        data.put("toConfirm", toConfirm);  // 待收货数量
+        data.put("toShip", toShip);  // 待交付数量
+        data.put("toConfirm", toConfirm);  // 待确认数量
         return Result.success(data);
     }
 
@@ -503,8 +507,25 @@ public class OrderServiceImpl implements OrderService {
         Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, user -> user));
 
+        // 一次批量查询数据库评价记录，刷新页面后仍能正确显示已评价。
+        Map<Long, Long> completedBuyers = orders.stream()
+                .filter(order -> Integer.valueOf(3).equals(order.getStatus()))
+                .collect(Collectors.toMap(Order::getId, Order::getBuyerId));
+        Set<Long> evaluatedIds = new HashSet<>();
+        if (!completedBuyers.isEmpty()) {
+            LambdaQueryWrapper<Evaluation> query = new LambdaQueryWrapper<>();
+            query.in(Evaluation::getOrderId, completedBuyers.keySet())
+                    .select(Evaluation::getOrderId, Evaluation::getFromUserId);
+            for (Evaluation evaluation : evaluationMapper.selectList(query)) {
+                if (java.util.Objects.equals(completedBuyers.get(evaluation.getOrderId()), evaluation.getFromUserId())) {
+                    evaluatedIds.add(evaluation.getOrderId());
+                }
+            }
+        }
+
         // 为每个订单补齐字段
         for (Order order : orders) {
+            order.setEvaluated(evaluatedIds.contains(order.getId()));
             Product product = productMap.get(order.getProductId());
             if (product != null) {
                 order.setProductTitle(product.getTitle());  // 商品标题
@@ -603,7 +624,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * 发货内部方法
+     * 交付内部方法
      */
     private String shipOrderInternal(Long sellerId, Long orderId, String expressNo) {
         // 订单ID校验
@@ -620,29 +641,26 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getSellerId().equals(sellerId)) {
             return "无权操作";
         }
-        // 订单状态不是待发货
+        // 订单状态不是待交付
         if (order.getStatus() != 1) {
-            return "仅待发货状态可发货";
-        }
-        // 快递单号为空
-        if (expressNo == null || expressNo.trim().isEmpty()) {
-            return "请填写物流单号";
+            return "仅待交付状态可交付";
         }
         // 更新订单
-        order.setExpressNo(expressNo.trim());  // 快递单号
-        order.setStatus(2);  // 状态改为待收货
-        order.setDeliverTime(new Date());  // 发货时间
+        // 面交不生成物流凭证，也不能把卖家确认交付解释为已支付。
+        order.setExpressNo(null);
+        order.setStatus(2);  // 状态改为待确认
+        order.setDeliverTime(new Date());  // 交付时间
         orderMapper.updateById(order);
-        log.info("订单已发货：订单号={} 快递单号={}", order.getOrderNo(), expressNo);
+        log.info("卖家已确认面交交付：订单号={}", order.getOrderNo());
 
-        // 通知买家：卖家已发货
-        notificationService.notifyUser(order.getBuyerId(), "order", "卖家已发货",
-                "您的订单（" + order.getOrderNo() + "）已发货，快递单号：" + order.getExpressNo(), order.getId());
+        // 通知买家：卖家已交付
+        notificationService.notifyUser(order.getBuyerId(), "order", "卖家已确认交付",
+                "订单（" + order.getOrderNo() + "）卖家已确认面交交付，请实际收到商品并核对后确认。付款由双方线下完成。", order.getId());
         return null;  // 成功返回null
     }
 
     /**
-     * 拒绝发货内部方法
+     * 拒绝交付内部方法
      */
     private String rejectOrderInternal(Long sellerId, Long orderId, String reason) {
         // 订单ID校验
@@ -659,9 +677,9 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getSellerId().equals(sellerId)) {
             return "无权操作";
         }
-        // 订单状态不是待发货
+        // 订单状态不是待交付
         if (order.getStatus() != 1) {
-            return "仅待发货状态可拒绝";
+            return "仅待交付状态可拒绝";
         }
         // 更新订单为已取消
         order.setStatus(4);
@@ -670,12 +688,12 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.updateById(order);
         // 回补库存
         restoreProductStock(order);
-        log.info("卖家拒绝发货：卖家ID={} 订单号={} 原因={}",
+        log.info("卖家拒绝交付：卖家ID={} 订单号={} 原因={}",
                 sellerId, order.getOrderNo(), reason != null ? reason : "");
 
-        // 通知买家：卖家拒绝发货
-        notificationService.notifyUser(order.getBuyerId(), "order", "卖家拒绝发货",
-                "您的订单（" + order.getOrderNo() + "）被卖家拒绝发货：" + order.getCancelReason(), order.getId());
+        // 通知买家：卖家拒绝交付
+        notificationService.notifyUser(order.getBuyerId(), "order", "卖家拒绝交付",
+                "您的订单（" + order.getOrderNo() + "）被卖家拒绝交付：" + order.getCancelReason(), order.getId());
         return null;  // 成功返回null
     }
 
@@ -684,7 +702,7 @@ public class OrderServiceImpl implements OrderService {
      */
     private String normalizeRejectReason(String reason) {
         if (reason == null || reason.trim().isEmpty()) {
-            return "卖家拒绝发货";  // 默认原因
+            return "卖家拒绝交付";  // 默认原因
         }
         return reason.trim();
     }

@@ -41,13 +41,13 @@ public class OrderController {
      * 创建订单
      */
     @PostMapping("/create")  // POST请求，路径 /order/create
-    @Operation(summary = "创建订单", description = "需要登录，根据商品ID、购买数量和收货地址创建订单")
+    @Operation(summary = "创建订单", description = "需要登录，根据商品ID、购买数量和面交地点创建订单")
     public Result create(@Parameter(description = "商品ID", example = "100", required = true)
                          @RequestParam Long productId,  // 商品ID
                          @Parameter(description = "购买数量，必须大于0且不能超过库存", example = "1", required = true)
                          @RequestParam Integer quantity,  // 购买数量
-                         @Parameter(description = "面交或收货地址", example = "东区食堂门口", required = true)
-                         @RequestParam String address,  // 收货地址
+                         @Parameter(description = "面交地点", example = "东区食堂门口", required = true)
+                         @RequestParam String address,  // 面交地点
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 从session获取用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -178,10 +178,10 @@ public class OrderController {
     }
 
     /**
-     * 查询待处理订单数量（待发货+待收货）
+     * 查询待处理订单数量（待交付+待确认）
      */
     @GetMapping("/pending-count")  // GET请求，路径 /order/pending-count
-    @Operation(summary = "查询待处理订单数", description = "需要登录，返回待发货和待收货订单的合计数量")
+    @Operation(summary = "查询待处理订单数", description = "需要登录，返回待交付和待确认订单的合计数量")
     public Result pendingCount(@Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -194,10 +194,10 @@ public class OrderController {
     }
 
     /**
-     * 买家取消订单（仅待发货状态可取消）
+     * 买家取消订单（仅待交付状态可取消）
      */
     @PutMapping("/{id}/cancel")  // PUT请求，路径 /order/{id}/cancel
-    @Operation(summary = "取消订单", description = "需要登录，买家可取消待发货订单，并回补商品库存")
+    @Operation(summary = "取消订单", description = "需要登录，买家可取消待交付订单，并回补商品库存")
     public Result cancel(@Parameter(description = "订单ID", example = "1", required = true)
                          @PathVariable Long id,  // 订单ID
                          @Parameter(hidden = true) HttpSession session) {
@@ -212,14 +212,14 @@ public class OrderController {
     }
 
     /**
-     * 卖家发货
+     * 卖家交付
      */
-    @PutMapping("/{id}/ship")  // PUT请求，路径 /order/{id}/ship
-    @Operation(summary = "订单发货", description = "需要登录，卖家填写快递单号后将订单标记为已发货")
+    @PutMapping({"/{id}/deliver", "/{id}/ship"})  // ship路径保留兼容，当前业务统一为面交交付
+    @Operation(summary = "确认面交交付", description = "仅卖家实际交付商品后可确认，不要求物流单号，不代表平台确认付款")
     public Result ship(@Parameter(description = "订单ID", example = "1", required = true)
                        @PathVariable Long id,  // 订单ID
-                       @Parameter(description = "快递单号或面交凭证编号", example = "SF1234567890", required = true)
-                       @RequestParam String expressNo,  // 快递单号
+                       @Parameter(description = "旧接口兼容字段，面交不使用")
+                       @RequestParam(required = false) String expressNo,
                        @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -227,20 +227,20 @@ public class OrderController {
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 发货
+        // 交付
         return orderService.shipOrder(userId, id, expressNo);
     }
 
     /**
-     * 批量发货
+     * 批量交付
      */
-    @PutMapping("/batch/ship")  // PUT请求，路径 /order/batch/ship
-    @Operation(summary = "批量发货", description = "需要登录，卖家可批量提交多个订单的快递单号")
+    @PutMapping({"/batch/deliver", "/batch/ship"})
+    @Operation(summary = "批量确认面交交付", description = "逐项检查卖家身份及待交付状态，不要求物流单号")
     public Result batchShip(@io.swagger.v3.oas.annotations.parameters.RequestBody(
-                                description = "批量发货列表，每项包含 orderId 和 expressNo",
+                                description = "批量交付列表，每项包含 orderId",
                                 required = true,
                                 content = @Content(schema = @Schema(implementation = OrderBatchShipRequest.class)))
-                            @RequestBody OrderBatchShipRequest request,  // 请求体，包含订单ID和快递单号列表
+                            @RequestBody OrderBatchShipRequest request,  // 请求体，包含订单ID列表
                             @Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -248,15 +248,15 @@ public class OrderController {
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 批量发货
+        // 批量交付
         return orderService.batchShipOrders(userId, request != null ? request.getItems() : null);
     }
 
     /**
-     * 卖家拒绝发货
+     * 卖家拒绝交付
      */
     @PutMapping("/{id}/reject")  // PUT请求，路径 /order/{id}/reject
-    @Operation(summary = "拒绝发货", description = "需要登录，卖家可拒绝待发货订单，并回补商品库存")
+    @Operation(summary = "拒绝交付", description = "需要登录，卖家可拒绝待交付订单，并回补商品库存")
     public Result reject(@Parameter(description = "订单ID", example = "1", required = true)
                          @PathVariable Long id,  // 订单ID
                          @Parameter(description = "拒绝原因，可选", example = "商品已损坏")
@@ -268,15 +268,15 @@ public class OrderController {
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 拒绝发货
+        // 拒绝交付
         return orderService.rejectOrder(userId, id, reason);
     }
 
     /**
-     * 批量拒绝发货
+     * 批量拒绝交付
      */
     @PutMapping("/batch/reject")  // PUT请求，路径 /order/batch/reject
-    @Operation(summary = "批量拒绝发货", description = "需要登录，卖家可批量拒绝待发货订单并回补库存")
+    @Operation(summary = "批量拒绝交付", description = "需要登录，卖家可批量拒绝待交付订单并回补库存")
     public Result batchReject(@io.swagger.v3.oas.annotations.parameters.RequestBody(
                                   description = "批量拒绝请求，包含订单ID列表和统一拒绝原因",
                                   required = true,
@@ -296,10 +296,10 @@ public class OrderController {
     }
 
     /**
-     * 买家确认收货
+     * 买家确认收到
      */
     @PutMapping("/{id}/confirm")  // PUT请求，路径 /order/{id}/confirm
-    @Operation(summary = "确认收货", description = "需要登录，买家确认收到商品后订单完成")
+    @Operation(summary = "确认收到", description = "需要登录，买家确认收到商品后订单完成")
     public Result confirm(@Parameter(description = "订单ID", example = "1", required = true)
                           @PathVariable Long id,  // 订单ID
                           @Parameter(hidden = true) HttpSession session) {
@@ -309,7 +309,7 @@ public class OrderController {
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 确认收货
+        // 确认收到
         return orderService.confirmOrder(userId, id);
     }
 }
