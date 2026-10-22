@@ -12,10 +12,6 @@
       </div>
       <div class="seller-hero__stats">
         <div>
-          <strong>{{ seller.creditScore ?? 100 }}</strong>
-          <span>信用分</span>
-        </div>
-        <div>
           <strong>{{ productTotal }}</strong>
           <span>发布商品</span>
         </div>

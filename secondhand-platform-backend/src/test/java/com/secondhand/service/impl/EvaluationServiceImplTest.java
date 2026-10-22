@@ -26,6 +26,23 @@ import static org.mockito.Mockito.when;
 class EvaluationServiceImplTest {
 
     @Test
+    void submittingStarsAndTextDoesNotReadOrUpdateUserScore() {
+        EvaluationMapper evaluations = mock(EvaluationMapper.class);
+        OrderMapper orders = mock(OrderMapper.class);
+        UserMapper users = mock(UserMapper.class);
+        Order order = new Order(); order.setId(10L); order.setStatus(3);
+        order.setBuyerId(20L); order.setSellerId(30L);
+        when(orders.selectById(10L)).thenReturn(order);
+        EvaluationServiceImpl service = new EvaluationServiceImpl();
+        ReflectionTestUtils.setField(service, "evaluationMapper", evaluations);
+        ReflectionTestUtils.setField(service, "orderMapper", orders);
+        ReflectionTestUtils.setField(service, "userMapper", users);
+        assertThat(service.evaluate(20L, 10L, 5, "物品符合描述", false).getCode()).isEqualTo(200);
+        org.mockito.Mockito.verify(evaluations).insert(any(Evaluation.class));
+        org.mockito.Mockito.verifyNoInteractions(users);
+    }
+
+    @Test
     void userEvaluationsIncludeProductContextFromOrders() {
         EvaluationMapper evaluationMapper = mock(EvaluationMapper.class);
         OrderMapper orderMapper = mock(OrderMapper.class);

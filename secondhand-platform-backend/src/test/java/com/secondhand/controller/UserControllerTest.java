@@ -34,7 +34,6 @@ class UserControllerTest {
         user.setPassword("hashed-password");
         user.setPhone("13800138000");
         user.setEmail("seller@example.com");
-        user.setCreditScore(96);
 
         when(userService.getUserById(6L)).thenReturn(user);
 

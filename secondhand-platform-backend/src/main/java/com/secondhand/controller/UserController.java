@@ -231,7 +231,6 @@ public class UserController {
         user.setEmailVerified(null);
         user.setRole(null);
         user.setStatus(null);
-        user.setCreditScore(null);
         user.setCreateTime(null);
         user.setUpdateTime(null);
         // 调用service更新
