@@ -134,7 +134,7 @@
               min="0"
             />
             <button class="price-apply" type="button" @click="applyPriceFilter">确定</button>
-            <button v-if="hasPrice(minPrice) || hasPrice(maxPrice)" class="price-reset" type="button" @click="resetPrice">重置</button>
+            <button v-if="(minPrice !== null && minPrice !== '') || (maxPrice !== null && maxPrice !== '')" class="price-reset" type="button" @click="resetPrice">重置</button>
           </div>
         </div>
       </div>
@@ -227,6 +227,7 @@ import { Search, Plus } from '@element-plus/icons-vue'
 import { getCategories } from '@/api/category'
 import { searchProducts } from '@/api/product'
 import { CONDITION } from '@/utils/constant'
+import { readProductListQuery, buildProductListQuery, buildProductPageParams } from '@/utils/productFilters'
 import { resolveCategory } from '@/utils/categoryTree'
 import ProductCard from '@/components/common/ProductCard.vue'
 
@@ -249,6 +250,7 @@ const currentCategory = ref(0)
 const conditionFilter = ref(0)
 const minPrice = ref(null)
 const maxPrice = ref(null)
+const appliedFilters = computed(() => readProductListQuery(route.query))
 
 const searchHistory = ref([])
 const showHistory = ref(false)
@@ -256,6 +258,7 @@ const HISTORY_KEY = 'search_history'
 const MAX_HISTORY = 8
 
 const sortOptions = [
+  { label: '相关度', value: 'relevance' },
   { label: '最新', value: 'latest' },
   { label: '最热', value: 'hottest' },
   { label: '低价', value: 'price_asc' },
@@ -267,11 +270,12 @@ const categorySelection = computed(() => resolveCategory(categories.value, curre
 const currentCategoryName = computed(() => categorySelection.value.label)
 
 const activeFilters = computed(() => {
+  const filters = appliedFilters.value
   const r = []
-  if (keyword.value && keyword.value.trim()) {
+  if (filters.keyword) {
     r.push({
-      label: `搜索：${keyword.value.trim()}`,
-      remove: () => { keyword.value = ''; page.value = 1; syncQueryToUrl() }
+      label: `搜索：${filters.keyword}`,
+      remove: () => { keyword.value = ''; applySearch() }
     })
   }
   if (currentCategoryName.value) {
@@ -280,15 +284,15 @@ const activeFilters = computed(() => {
       remove: () => selectCategory(0)
     })
   }
-  if (conditionFilter.value > 0) {
+  if (filters.conditionLevel > 0) {
     r.push({
-      label: CONDITION[conditionFilter.value],
+      label: CONDITION[filters.conditionLevel],
       remove: () => toggleCondition(0)
     })
   }
-  if (hasPrice(minPrice.value) || hasPrice(maxPrice.value)) {
-    const lo = hasPrice(minPrice.value) ? `¥${minPrice.value}` : '¥0'
-    const hi = hasPrice(maxPrice.value) ? `¥${maxPrice.value}` : ''
+  if (filters.minPrice !== null || filters.maxPrice !== null) {
+    const lo = filters.minPrice !== null ? `¥${filters.minPrice}` : '¥0'
+    const hi = filters.maxPrice !== null ? `¥${filters.maxPrice}` : ''
     r.push({
       label: `${lo}${hi ? ' - ' + hi : '以上'}`,
       remove: resetPrice
@@ -305,7 +309,7 @@ onMounted(() => {
 })
 
 watch(
-  () => ({ ...route.query }),
+  () => route.query,
   () => {
     syncFromQuery()
     fetchProducts()
@@ -313,20 +317,15 @@ watch(
 )
 
 function syncFromQuery() {
-  const category = Number(route.query.categoryId)
-  currentCategory.value = Number.isInteger(category) && category > 0 ? category : 0
-  keyword.value = typeof route.query.keyword === 'string' ? route.query.keyword : ''
-  sort.value = ['relevance', 'latest', 'hottest', 'price_asc', 'price_desc'].includes(route.query.sort) ? route.query.sort : 'latest'
-  const currentPage = Number(route.query.page)
-  page.value = Number.isInteger(currentPage) && currentPage > 0 ? currentPage : 1
-  const condition = Number(route.query.conditionLevel)
-  conditionFilter.value = [1, 2, 3, 4].includes(condition) ? condition : 0
-  minPrice.value = typeof route.query.minPrice === 'string' ? route.query.minPrice : null
-  maxPrice.value = typeof route.query.maxPrice === 'string' ? route.query.maxPrice : null
-}
-
-function hasPrice(value) {
-  return value !== null && value !== undefined && value !== ''
+  // URL 是已生效筛选的唯一来源，价格与成色也在刷新及历史导航时恢复。
+  const filters = appliedFilters.value
+  currentCategory.value = filters.categoryId
+  keyword.value = filters.keyword
+  sort.value = filters.sort
+  page.value = filters.page
+  minPrice.value = filters.minPrice
+  maxPrice.value = filters.maxPrice
+  conditionFilter.value = filters.conditionLevel
 }
 
 function loadHistory() {
@@ -365,59 +364,44 @@ function hideHistoryDelayed() {
 }
 
 function selectCategory(id) {
-  currentCategory.value = id
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ categoryId: id, page: 1 })
 }
 
 function toggleCondition(val) {
-  conditionFilter.value = val === conditionFilter.value ? 0 : val
-  page.value = 1
-  syncQueryToUrl()
+  const conditionLevel = val === appliedFilters.value.conditionLevel ? 0 : val
+  syncQueryToUrl({ conditionLevel, page: 1 })
 }
 
 function applySearch() {
   keyword.value = keyword.value.trim()
   if (keyword.value) saveHistory(keyword.value)
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ keyword: keyword.value, page: 1 })
 }
 
 function applyPriceFilter() {
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ minPrice: minPrice.value, maxPrice: maxPrice.value, page: 1 })
 }
 
-function syncQueryToUrl() {
-  const q = {}
-  if (currentCategory.value > 0) q.categoryId = currentCategory.value
-  if (keyword.value && keyword.value.trim()) q.keyword = keyword.value.trim()
-  if (sort.value !== 'latest') q.sort = sort.value
-  if (page.value > 1) q.page = page.value
-  if (conditionFilter.value > 0) q.conditionLevel = conditionFilter.value
-  if (hasPrice(minPrice.value)) q.minPrice = minPrice.value
-  if (hasPrice(maxPrice.value)) q.maxPrice = maxPrice.value
-  // URL 变化由 watch 发起一次请求；相同条件再次搜索也需要刷新结果。
-  if (router.resolve({ query: q }).fullPath === route.fullPath) fetchProducts()
-  else router.replace({ query: q })
+function syncQueryToUrl(changes) {
+  // 修改一个条件时保留其他已生效条件；未确认的输入不会悄悄影响翻页。
+  const query = buildProductListQuery({ ...appliedFilters.value, ...changes })
+  const target = { name: 'Products', query }
+  if (router.resolve(target).fullPath === route.fullPath) fetchProducts()
+  else router.replace(target)
 }
 
 function resetPrice() {
   minPrice.value = null
   maxPrice.value = null
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ minPrice: null, maxPrice: null, page: 1 })
 }
 
 function changeSort(val) {
-  sort.value = val
-  page.value = 1
-  syncQueryToUrl()
+  syncQueryToUrl({ sort: val, page: 1 })
 }
 
 function handlePageChange(val) {
-  page.value = val
-  syncQueryToUrl()
+  syncQueryToUrl({ page: val })
 }
 
 async function fetchCategories() {
@@ -431,22 +415,7 @@ async function fetchProducts() {
   loading.value = true
   loadError.value = ''
   try {
-    const params = {
-      page: page.value,
-      size: size.value,
-      sort: sort.value
-    }
-    if (currentCategory.value > 0) params.categoryId = currentCategory.value
-    if (keyword.value) params.keyword = keyword.value
-    if (conditionFilter.value > 0) params.conditionLevel = conditionFilter.value
-    if (hasPrice(minPrice.value)) params.minPrice = minPrice.value
-    if (hasPrice(maxPrice.value)) params.maxPrice = maxPrice.value
-    if ([params.minPrice, params.maxPrice].some(value => hasPrice(value) && (!Number.isFinite(Number(value)) || Number(value) < 0))) {
-      throw new Error('价格请输入大于或等于 0 的数字')
-    }
-    if (hasPrice(params.minPrice) && hasPrice(params.maxPrice) && Number(params.minPrice) > Number(params.maxPrice)) {
-      throw new Error('最低价格不能高于最高价格')
-    }
+    const params = buildProductPageParams(route.query, size.value)
     const data = await searchProducts(params)
     if (sequence !== requestSequence) return
     products.value = data.records || []

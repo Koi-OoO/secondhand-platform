@@ -32,12 +32,12 @@ export function cancelOrder(id) {
   return http.put(`/order/${id}/cancel`)
 }
 
-export function shipOrder(id, expressNo) {
-  return http.put(`/order/${id}/ship`, null, { params: { expressNo } })
+export function deliverOrder(id) {
+  return http.put(`/order/${id}/deliver`)
 }
 
-export function batchShipOrders(items) {
-  return http.put('/order/batch/ship', { items })
+export function batchDeliverOrders(items) {
+  return http.put('/order/batch/deliver', { items })
 }
 
 export function confirmOrder(id) {

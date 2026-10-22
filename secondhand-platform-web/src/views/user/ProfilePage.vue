@@ -11,9 +11,6 @@
         <div class="profile-head__info">
           <h3>{{ userStore.nickname }}</h3>
           <span class="profile-username">@{{ userStore.username }}</span>
-          <span class="profile-credit">
-            信誉分 <strong>{{ userStore.userInfo?.creditScore ?? 100 }}</strong>
-          </span>
         </div>
         <div class="profile-head__actions">
           <router-link to="/user/security" class="btn-edit">
@@ -152,21 +149,6 @@ const emailVerified = computed(() => userStore.userInfo?.emailVerified === 1)
 .profile-username {
   font-size: $font-size-sm;
   color: $color-text-muted;
-}
-
-.profile-credit {
-  display: inline-block;
-  width: fit-content;
-  font-size: $font-size-sm;
-  color: $color-success;
-  background: rgba($color-success, 0.08);
-  padding: 2px 10px;
-  border-radius: $radius-full;
-  margin-top: 4px;
-
-  strong {
-    font-weight: 700;
-  }
 }
 
 .profile-head__actions {

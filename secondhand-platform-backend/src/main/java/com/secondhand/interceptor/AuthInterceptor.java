@@ -1,6 +1,9 @@
 package com.secondhand.interceptor;
 
 import com.secondhand.util.SessionUtil;
+import com.secondhand.entity.User;
+import com.secondhand.service.SessionAccountService;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -23,6 +26,8 @@ import org.springframework.stereotype.Component;
 @Component  // 将过滤器注册为Spring Bean
 @Order(Ordered.LOWEST_PRECEDENCE)  // 设置过滤器执行顺序（低优先级，让其他过滤器先执行）
 public class AuthInterceptor implements Filter {
+    @Autowired(required = false)
+    private SessionAccountService sessionAccountService;
 
     /**
      * 白名单路径（不需要登录即可访问的接口）
@@ -54,6 +59,15 @@ public class AuthInterceptor implements Filter {
 
         // 获取请求的URI
         String uri = httpReq.getRequestURI();
+        if (SessionAccountService.isManagerRoute(httpReq.getMethod(), uri)) {
+            chain.doFilter(req, res);
+            return;
+        }
+        if (uri.startsWith("/internal/")
+                && Boolean.TRUE.equals(httpReq.getAttribute("internalServiceAuthenticated"))) {
+            chain.doFilter(req, res);
+            return;
+        }
         // 全文搜索是公开只读接口；只匹配 GET 本身，不放开未来可能新增的管理子路径。
         if ("GET".equalsIgnoreCase(httpReq.getMethod()) && "/product/search".equals(uri)) {
             chain.doFilter(req, res);
@@ -71,7 +85,9 @@ public class AuthInterceptor implements Filter {
         // 非白名单接口：需要验证登录
         HttpSession session = httpReq.getSession(false);  // 获取session，不自动创建
         // 检查session是否存在且用户已登录
-        if (session == null || !SessionUtil.isLoggedIn(session)) {
+        User validated = session == null ? null : sessionAccountService != null
+                ? sessionAccountService.validateCurrent(session) : SessionUtil.getSessionUser(session);
+        if (validated == null) {
             // 未登录：设置401状态码
             httpRes.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             // 设置响应格式为JSON
@@ -81,8 +97,19 @@ public class AuthInterceptor implements Filter {
             return;
         }
 
+        String expected = httpReq.getHeader("X-Active-User-Id");
+        if (expected != null && !expected.equals(validated.getId().toString())) {
+            httpRes.setStatus(409);
+            httpRes.setHeader("X-Account-Changed", "true");
+            httpRes.setContentType("application/json; charset=utf-8");
+            httpRes.getWriter().write("{\"code\":500,\"message\":\"当前账号已在其他页面切换，请刷新\",\"data\":null}");
+            return;
+        }
+
         // 放行请求
-        chain.doFilter(req, res);
+        httpReq.setAttribute(SessionUtil.REQUEST_USER_KEY, SessionUtil.safeCopy(validated));
+        try { chain.doFilter(req, res); }
+        finally { httpReq.removeAttribute(SessionUtil.REQUEST_USER_KEY); }
     }
 
     /**

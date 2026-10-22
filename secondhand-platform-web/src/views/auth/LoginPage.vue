@@ -28,9 +28,42 @@
         <span class="form-tape" aria-hidden="true"></span>
         <div class="auth-form__header">
           <p class="form-kicker">WELCOME BACK</p>
-          <h2>欢迎回来</h2>
-          <p>登录你的校园闲物账号</p>
+          <h2>{{ switchMode ? '切换账号' : '欢迎回来' }}</h2>
+          <p>{{ switchMode ? '选择最近账号，输入密码重新登录' : '登录你的校园闲物账号' }}</p>
         </div>
+
+        <section v-if="recentAccounts.length" class="recent-accounts" aria-labelledby="recent-accounts-title">
+          <div class="recent-accounts__heading">
+            <span id="recent-accounts-title">最近登录</span>
+            <button type="button" class="recent-accounts__other" :disabled="userStore.loading" @click="useOtherAccount">
+              使用其他账号
+            </button>
+          </div>
+          <ul class="recent-accounts__list">
+            <li v-for="account in recentAccounts" :key="account.username" class="recent-account"
+                :class="{ 'recent-account--selected': form.username === account.username }">
+              <button type="button" class="recent-account__choose" :disabled="userStore.loading"
+                      :aria-pressed="form.username === account.username"
+                      :aria-label="`选择账号 ${account.username}`" @click="selectAccount(account)">
+                <el-avatar :size="34" :src="account.avatar" class="recent-account__avatar">
+                  {{ account.nickname.charAt(0) }}
+                </el-avatar>
+                <span class="recent-account__identity">
+                  <strong>{{ account.nickname }}</strong>
+                  <small>{{ account.username }}</small>
+                </span>
+                <el-icon v-if="form.username === account.username" class="recent-account__check"><Check /></el-icon>
+              </button>
+              <button type="button" class="recent-account__remove" :disabled="userStore.loading"
+                      :aria-label="`移除账号 ${account.username} 的本机记录`" title="移除本机记录"
+                      @click="removeAccount(account.username)">
+                <el-icon><Close /></el-icon>
+              </button>
+            </li>
+          </ul>
+          <p class="recent-accounts__hint">仅记住账号信息，不保存密码；移除记录不会删除账号。</p>
+        </section>
+        <p v-else-if="switchMode" class="recent-accounts__empty">暂无最近账号，请输入要登录的用户名和密码。</p>
 
         <div v-if="userStore.loginError" class="auth-error">{{ userStore.loginError }}</div>
 
@@ -47,6 +80,9 @@
               placeholder="请输入用户名"
               :prefix-icon="User"
               size="large"
+              ref="usernameInput"
+              autocomplete="username"
+              :disabled="userStore.loading"
             />
           </el-form-item>
 
@@ -58,6 +94,9 @@
               :prefix-icon="Lock"
               show-password
               size="large"
+              ref="passwordInput"
+              autocomplete="current-password"
+              :disabled="userStore.loading"
             />
           </el-form-item>
 
@@ -88,15 +127,20 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, Check, Close } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { loadRecentAccounts, removeRecentAccount } from '@/utils/recentAccounts'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const formRef = ref(null)
+const usernameInput = ref(null)
+const passwordInput = ref(null)
+const recentAccounts = ref(loadRecentAccounts())
+const switchMode = computed(() => route.query.switch === '1')
 
 const form = reactive({
   username: '',
@@ -108,7 +152,32 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
+async function selectAccount(account) {
+  // 这里只填入用户名；每次选择账号都清空密码，仍由 Java 校验凭证。
+  form.username = account.username
+  form.password = ''
+  userStore.loginError = ''
+  formRef.value?.clearValidate()
+  await nextTick()
+  passwordInput.value?.focus()
+}
+
+async function useOtherAccount() {
+  form.username = ''
+  form.password = ''
+  userStore.loginError = ''
+  formRef.value?.clearValidate()
+  await nextTick()
+  usernameInput.value?.focus()
+}
+
+function removeAccount(username) {
+  recentAccounts.value = removeRecentAccount(username)
+  if (form.username === username) useOtherAccount()
+}
+
 async function handleLogin() {
+  if (userStore.loading) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
@@ -471,6 +540,112 @@ async function handleLogin() {
     font-size: $font-size-sm;
     font-weight: $font-weight-heavy;
   }
+}
+
+.recent-accounts {
+  margin: 0 0 $space-lg;
+
+  &__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    color: $color-ink;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-heavy;
+  }
+
+  &__other {
+    padding: 3px 0;
+    border: 0;
+    background: transparent;
+    color: $color-red-deep;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  &__list {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__hint, &__empty {
+    margin: 10px 0 0;
+    color: $color-text-secondary;
+    font-size: $font-size-xs;
+    line-height: 1.6;
+  }
+
+  &__empty { margin-bottom: $space-md; }
+}
+
+.recent-account {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid $color-border-light;
+  border-radius: $radius-sm;
+  background: $color-paper;
+
+  &--selected {
+    border-color: $color-red-deep;
+    background: $color-bg-hover;
+    box-shadow: 2px 2px 0 rgba($color-ink, 0.15);
+  }
+
+  &__choose {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $color-ink;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  &__avatar { flex-shrink: 0; background: $color-red-deep; color: $color-paper-2; }
+
+  &__identity {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+
+    strong, small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    strong { font-size: $font-size-sm; }
+    small { color: $color-text-secondary; font-size: $font-size-xs; }
+  }
+
+  &__check { flex-shrink: 0; color: $color-red-deep; }
+
+  &__remove {
+    display: grid;
+    flex-shrink: 0;
+    width: 36px;
+    place-items: center;
+    border: 0;
+    border-left: 1px dashed $color-border-light;
+    border-radius: 0 $radius-sm $radius-sm 0;
+    background: transparent;
+    color: $color-text-secondary;
+    cursor: pointer;
+
+    &:hover { color: $color-red-deep; background: $color-primary-lighter; }
+  }
+}
+
+.recent-accounts button, .recent-account button {
+  &:focus-visible { outline: 2px solid $color-red-deep; outline-offset: 2px; }
+  &:disabled { cursor: wait; opacity: 0.6; }
 }
 
 @media (max-width: 860px) {

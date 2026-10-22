@@ -4,6 +4,8 @@ import com.secondhand.entity.BatchOperationResult;
 import com.secondhand.entity.Order;
 import com.secondhand.entity.OrderBatchShipItem;
 import com.secondhand.entity.Product;
+import com.secondhand.entity.Evaluation;
+import com.secondhand.mapper.EvaluationMapper;
 import com.secondhand.mapper.OrderMapper;
 import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
@@ -271,7 +273,7 @@ class OrderServiceImplTest {
     }
 
     @Test
-    void batchShipOrdersReturnsFailureWhenTrackingNumberMissing() {
+    void batchMeetupDeliverySucceedsWithoutTrackingNumber() {
         Order order = completedOrder(10L, 20L, 30L);
         order.setStatus(1);
         when(orderMapper.selectById(10L)).thenReturn(order);
@@ -284,8 +286,56 @@ class OrderServiceImplTest {
 
         assertThat(result.getCode()).isEqualTo(200);
         BatchOperationResult data = (BatchOperationResult) result.getData();
-        assertThat(data.getSuccessCount()).isEqualTo(0);
-        assertThat(data.getFailCount()).isEqualTo(1);
+        assertThat(data.getSuccessCount()).isEqualTo(1);
+        assertThat(data.getFailCount()).isEqualTo(0);
+        assertThat(order.getStatus()).isEqualTo(2);
+    }
+
+    @Test
+    void meetupDeliveryRequiresSellerAndPendingStateButNoTrackingNumber() {
+        Order order = completedOrder(10L, 20L, 30L);
+        order.setStatus(1);
+        when(orderMapper.selectById(10L)).thenReturn(order);
+        assertThat(service.shipOrder(99L, 10L, null).getCode()).isNotEqualTo(200);
+        assertThat(order.getStatus()).isEqualTo(1);
+        assertThat(service.confirmOrder(20L, 10L).getCode()).isNotEqualTo(200);
+        assertThat(service.shipOrder(30L, 10L, null).getCode()).isEqualTo(200);
+        assertThat(order.getStatus()).isEqualTo(2);
+        assertThat(order.getExpressNo()).isNull();
+        assertThat(service.shipOrder(30L, 10L, null).getCode()).isNotEqualTo(200);
+        assertThat(service.confirmOrder(99L, 10L).getCode()).isNotEqualTo(200);
+        assertThat(service.confirmOrder(20L, 10L).getCode()).isEqualTo(200);
+        assertThat(order.getStatus()).isEqualTo(3);
+        assertThat(service.confirmOrder(20L, 10L).getCode()).isNotEqualTo(200);
+    }
+
+    @Test
+    void orderListsReloadEvaluatedFlagFromDatabaseWithoutTrustingOldObjectState() {
+        // 纯Mockito测试未启动MyBatis，需初始化select(lambda)使用的实体字段映射。
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), Evaluation.class);
+        EvaluationMapper evaluations = mock(EvaluationMapper.class);
+        ReflectionTestUtils.setField(service, "evaluationMapper", evaluations);
+        Order order = completedOrder(10L, 20L, 30L);
+        when(orderMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenAnswer(invocation -> {
+            IPage<Order> page = invocation.getArgument(0);
+            page.setRecords(Collections.singletonList(order));
+            page.setTotal(1);
+            return page;
+        });
+        when(productMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+        when(productImageMapper.selectByProductIds(any())).thenReturn(Collections.emptyList());
+        when(userMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+        Evaluation evaluation = new Evaluation();
+        evaluation.setOrderId(10L); evaluation.setFromUserId(20L);
+        when(evaluations.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(evaluation));
+        service.getMyBoughtOrders(20L, 1, 12);
+        assertThat(ReflectionTestUtils.getField(order, "evaluated")).isEqualTo(true);
+        service.getMySoldOrders(30L, 1, 12);
+        assertThat(ReflectionTestUtils.getField(order, "evaluated")).isEqualTo(true);
+        when(evaluations.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+        service.getMyBoughtOrders(20L, 1, 12);
+        assertThat(ReflectionTestUtils.getField(order, "evaluated")).isEqualTo(false);
     }
 
     @Test

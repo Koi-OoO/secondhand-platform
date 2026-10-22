@@ -36,6 +36,14 @@ public interface ProductService {
                         String sort);
 
     /**
+     * 为 AI 查询商品分页结果，不记录热搜词。
+     */
+    Result pageProductsForAi(Integer page, Integer size, Integer categoryId,
+                             String keyword, BigDecimal minPrice,
+                             BigDecimal maxPrice, Integer conditionLevel,
+                             String sort);
+
+    /**
      * 获取商品详情
      *
      * 业务逻辑：查询商品完整信息，并在成功访问后记录一次浏览量。
@@ -44,6 +52,11 @@ public interface ProductService {
      * @return Result 商品详情结果
      */
     Result getDetail(Long productId);
+
+    /**
+     * 为 AI 查询商品详情，不增加浏览量。
+     */
+    Result getDetailForAi(Long productId);
 
     /**
      * 发布商品

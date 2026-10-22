@@ -5,6 +5,8 @@ import { getConversations, getMessageUnreadCount, getOnlineStatus } from '@/api/
 import { getNotificationUnreadCount } from '@/api/notification'
 import { useUserStore } from '@/stores/user'
 import { getOnlineUserIdFromReceivedMessage, normalizePresenceStatus } from '@/utils/messageState'
+import { bindSocketIdentity } from '@/utils/requestIdentity'
+import { getUserProfile } from '@/api/user'
 
 function resolveWsUrl() {
   if (import.meta.env.VITE_WS_URL) {
@@ -143,7 +145,7 @@ export const useMessageStore = defineStore('message', () => {
 
     manualClose = false
     connecting.value = true
-    socket = new WebSocket(resolveWsUrl())
+    socket = new WebSocket(bindSocketIdentity(resolveWsUrl()))
 
     socket.onopen = () => {
       connected.value = true
@@ -163,11 +165,14 @@ export const useMessageStore = defineStore('message', () => {
       connecting.value = false
     }
 
-    socket.onclose = () => {
+    socket.onclose = async () => {
       connected.value = false
       connecting.value = false
       stopHeartbeat()
       if (!manualClose && useUserStore().isLoggedIn) {
+        // 握手失败时浏览器不提供 HTTP 状态；用普通身份请求触发跨标签页409刷新或过期401跳转。
+        try { await getUserProfile({ skipErrorMessage: true }) } catch { /* 请求拦截器处理身份变化 */ }
+        if (manualClose || !useUserStore().isLoggedIn) return
         scheduleReconnect()
       }
     }

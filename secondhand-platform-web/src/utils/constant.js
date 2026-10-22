@@ -32,8 +32,8 @@ export const PRODUCT_STATUS_COLOR = {
 
 /** 订单状态 */
 export const ORDER_STATUS = {
-  1: '待发货',
-  2: '待收货',
+  1: '待交付',
+  2: '待确认',
   3: '已完成',
   4: '已取消'
 }

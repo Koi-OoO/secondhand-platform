@@ -63,9 +63,6 @@ public class User implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
     private Date birthday;
 
-    @Schema(description = "信用分", example = "100")
-    private Integer creditScore;
-
     @Schema(description = "创建时间", accessMode = Schema.AccessMode.READ_ONLY)
     private Date createTime;
 

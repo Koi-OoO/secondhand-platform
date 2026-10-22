@@ -6,8 +6,8 @@ import java.util.List;
 
 /**
  * 订单服务接口
- * 定义订单模块的核心业务能力，覆盖下单、查询、发货、取消、
- * 确认收货、批量处理以及历史记录隐藏等场景。
+ * 定义订单模块的核心业务能力，覆盖下单、查询、交付、取消、
+ * 确认收到、批量处理以及历史记录隐藏等场景。
  */
 public interface OrderService {
 
@@ -17,7 +17,7 @@ public interface OrderService {
      * @param buyerId 买家用户 ID
      * @param productId 商品 ID
      * @param quantity 购买数量
-     * @param address 收货地址
+     * @param address 面交地点
      * @return Result 下单结果
      */
     Result createOrder(Long buyerId, Long productId, Integer quantity, String address);
@@ -88,26 +88,26 @@ public interface OrderService {
     Result cancelOrder(Long userId, Long orderId);
 
     /**
-     * 卖家为订单填写快递单号并发货
+     * 卖家确认实际面交交付（不要求物流单号）
      *
      * @param sellerId 卖家用户 ID
      * @param orderId 订单 ID
-     * @param expressNo 快递单号
-     * @return Result 发货结果
+     * @param expressNo 旧接口兼容字段，面交不使用
+     * @return Result 交付结果
      */
     Result shipOrder(Long sellerId, Long orderId, String expressNo);
 
     /**
-     * 卖家批量发货
+     * 卖家批量交付
      *
      * @param sellerId 卖家用户 ID
-     * @param items 发货项列表
-     * @return Result 批量发货结果
+     * @param items 交付项列表
+     * @return Result 批量交付结果
      */
     Result batchShipOrders(Long sellerId, List<OrderBatchShipItem> items);
 
     /**
-     * 买家确认收货
+     * 买家确认收到
      *
      * @param buyerId 买家用户 ID
      * @param orderId 订单 ID
@@ -116,7 +116,7 @@ public interface OrderService {
     Result confirmOrder(Long buyerId, Long orderId);
 
     /**
-     * 卖家拒绝发货并回滚库存
+     * 卖家拒绝交付并回滚库存
      *
      * @param sellerId 卖家用户 ID
      * @param orderId 订单 ID
@@ -126,7 +126,7 @@ public interface OrderService {
     Result rejectOrder(Long sellerId, Long orderId, String reason);
 
     /**
-     * 卖家批量拒绝发货
+     * 卖家批量拒绝交付
      *
      * @param sellerId 卖家用户 ID
      * @param orderIds 订单 ID 列表

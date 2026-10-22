@@ -86,16 +86,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         ev.setCreateTime(new Date());  // 创建时间
         evaluationMapper.insert(ev);  // 插入数据库
 
-        // 更新卖家信用分 = 平均评分 * 20，范围20-100
-        double avg = evaluationMapper.avgRatingByUser(order.getSellerId());  // 查询平均评分
-        int creditScore = (int) Math.round(avg * 20);  // 转换为信用分
-        User seller = userMapper.selectById(order.getSellerId());  // 查询卖家
-        if (seller != null) {
-            // 限制信用分在0-100之间
-            seller.setCreditScore(Math.max(0, Math.min(100, creditScore)));
-            userMapper.updateById(seller);  // 更新卖家信用分
-        }
-
         return Result.success("评价成功");
     }
 

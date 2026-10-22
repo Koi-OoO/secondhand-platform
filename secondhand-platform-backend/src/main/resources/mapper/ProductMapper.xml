@@ -3,6 +3,10 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.secondhand.mapper.ProductMapper">
 
+    <!-- 匹配主商品名称，赠送或附带的配件不改变整机类型，也不冒充独立配件商品。 -->
+    <sql id="searchTitle">
+        LOWER(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(p.title, '附赠', 1), '附带', 1), '赠送', 1), '赠', 1))
+    </sql>
     <!-- 命中后回查 MySQL：避免每件商品各查一次，也不从索引返回过期展示数据。 -->
     <select id="selectSearchDetailsByIds" resultType="com.secondhand.entity.Product">
         SELECT p.*, u.nickname AS seller_nickname, u.username AS seller_username,
@@ -16,6 +20,7 @@
 
     <!-- 分页查询商品列表（多条件筛选 + 排序 + 关联卖家信息和分类名） -->
     <select id="selectPageWithDetails" resultType="com.secondhand.entity.Product">
+        <bind name="keywordQuery" value="@com.secondhand.util.ProductKeywordQuery@parse(keyword)"/>
         SELECT
             p.*,
             u.nickname AS seller_nickname,
@@ -41,8 +46,16 @@
                     )
                 )
             </if>
-            <if test="keyword != null and keyword != ''">
-                AND p.title LIKE CONCAT('%', #{keyword}, '%')
+            <if test="keywordQuery != null">
+                <foreach collection="keywordQuery.requiredGroups" item="termGroup">
+                    AND
+                    <foreach collection="termGroup" item="term" open="(" separator=" OR " close=")">
+                        <include refid="searchTitle"/> LIKE CONCAT('%', #{term}, '%')
+                    </foreach>
+                </foreach>
+                <foreach collection="keywordQuery.excludedTerms" item="excludedTerm">
+                    AND <include refid="searchTitle"/> NOT LIKE CONCAT('%', #{excludedTerm}, '%')
+                </foreach>
             </if>
             <if test="minPrice != null">
                 AND p.price &gt;= #{minPrice}
@@ -56,16 +69,16 @@
         </where>
         <choose>
             <when test="sort == 'price_asc'">
-                ORDER BY p.price ASC
+                ORDER BY p.price ASC, p.id DESC
             </when>
             <when test="sort == 'price_desc'">
-                ORDER BY p.price DESC
+                ORDER BY p.price DESC, p.id DESC
             </when>
             <when test="sort == 'hottest'">
-                ORDER BY p.view_count DESC, p.create_time DESC
+                ORDER BY p.view_count DESC, p.create_time DESC, p.id DESC
             </when>
             <otherwise>
-                ORDER BY p.create_time DESC
+                ORDER BY p.create_time DESC, p.id DESC
             </otherwise>
         </choose>
     </select>

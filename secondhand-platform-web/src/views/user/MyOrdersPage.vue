@@ -29,9 +29,10 @@
             plain
             type="primary"
             :disabled="selectedPendingOrders.length === 0"
-            @click="openBatchShip"
+            :loading="batchDeliverLoading"
+            @click="handleBatchDeliver"
           >
-            批量发货
+            批量交付
           </el-button>
           <el-button
             plain
@@ -39,7 +40,7 @@
             :disabled="selectedPendingOrders.length === 0"
             @click="handleBatchReject"
           >
-            批量拒绝发货
+            批量拒绝交付
           </el-button>
           <el-button
             plain
@@ -82,12 +83,12 @@
               <h3 @click="$router.push(`/product/${order.productId}`)">{{ order.productTitle }}</h3>
               <div class="order-info__line">数量：{{ order.quantity || 1 }}</div>
               <div class="order-info__line">商品金额：{{ formatPrice(order.productAmount) }}</div>
-              <div class="order-info__line order-info__total">实付总额：<strong>{{ formatPrice(order.totalAmount) }}</strong></div>
+              <div class="order-info__line order-info__total">订单金额：<strong>{{ formatPrice(order.totalAmount) }}</strong></div>
               <div class="order-info__line">
                 {{ tab === 'bought' ? '卖家' : '买家' }}：{{ tab === 'bought' ? order.sellerNickname : order.buyerNickname }}
               </div>
-              <div class="order-info__line">收货地址：{{ order.address }}</div>
-              <div v-if="order.expressNo" class="order-info__line">物流单号：{{ order.expressNo }}</div>
+              <div class="order-info__line">面交地点：{{ order.address }}</div>
+              <div class="order-info__line">请线下验货并自行付款；平台不代收款、不提供交易担保，交付状态不代表已付款。</div>
               <div v-if="cancelNotice(order)" class="order-notice">{{ cancelNotice(order) }}</div>
             </div>
           </div>
@@ -109,16 +110,17 @@
                 :loading="actingId === order.id"
                 @click="handleConfirm(order)"
               >
-                确认收货
+                确认完成
               </el-button>
               <el-button
-                v-if="order.status === 3 && !evaluatedIds.has(order.id)"
+                v-if="order.status === 3 && !order.evaluated"
                 plain
                 type="warning"
                 @click="openEval(order)"
               >
                 评价
               </el-button>
+              <el-tag v-if="order.status === 3 && order.evaluated" type="info">已评价</el-tag>
               <el-button
                 v-if="isHideable(order)"
                 plain
@@ -135,9 +137,9 @@
                 v-if="order.status === 1"
                 type="primary"
                 :loading="actingId === order.id"
-                @click="openShip(order)"
+                @click="handleDeliver(order)"
               >
-                发货
+                确认交付
               </el-button>
               <el-button
                 v-if="order.status === 1"
@@ -146,7 +148,7 @@
                 :loading="actingId === order.id"
                 @click="handleReject(order)"
               >
-                拒绝发货
+                拒绝交付
               </el-button>
               <el-button
                 v-if="isHideable(order)"
@@ -178,19 +180,6 @@
         @current-change="fetchData"
       />
     </div>
-
-    <el-dialog v-model="batchShipVisible" title="批量发货" width="560px" destroy-on-close>
-      <div class="batch-ship-list">
-        <div v-for="item in batchShipItems" :key="item.orderId" class="batch-ship-item">
-          <div class="batch-ship-item__title">订单 {{ item.orderNo }}</div>
-          <el-input v-model="item.expressNo" placeholder="请输入物流单号" />
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="batchShipVisible = false">取消</el-button>
-        <el-button type="primary" :loading="batchShipLoading" @click="submitBatchShip">确认发货</el-button>
-      </template>
-    </el-dialog>
 
     <el-dialog v-model="evalVisible" title="评价订单" width="420px" destroy-on-close>
       <div class="eval-form">
@@ -234,7 +223,7 @@ import {
   batchHideBoughtOrders,
   batchHideSoldOrders,
   batchRejectOrders,
-  batchShipOrders,
+  batchDeliverOrders,
   cancelOrder,
   confirmOrder,
   getBoughtOrders,
@@ -242,7 +231,7 @@ import {
   hideBoughtOrder,
   hideSoldOrder,
   rejectOrder,
-  shipOrder
+  deliverOrder
 } from '@/api/order'
 import { evaluate } from '@/api/evaluation'
 import { formatPrice } from '@/utils/format'
@@ -258,7 +247,6 @@ const size = ref(12)
 const total = ref(0)
 const actingId = ref(null)
 const selectedIds = reactive(new Set())
-const evaluatedIds = reactive(new Set())
 
 const evalVisible = ref(false)
 const evalOrderId = ref(null)
@@ -267,9 +255,7 @@ const evalContent = ref('')
 const evalAnonymous = ref(false)
 const evalLoading = ref(false)
 
-const batchShipVisible = ref(false)
-const batchShipItems = ref([])
-const batchShipLoading = ref(false)
+const batchDeliverLoading = ref(false)
 
 const tabOptions = [
   { label: '我买到的', value: 'bought' },
@@ -277,8 +263,8 @@ const tabOptions = [
 ]
 
 const statusMap = {
-  1: '待发货',
-  2: '待收货',
+  1: '待交付',
+  2: '待确认',
   3: '已完成',
   4: '已取消'
 }
@@ -324,7 +310,7 @@ function statusColor(status) {
 
 function orderStatusText(order) {
   if (order.status === 4 && order.cancelType === 2) {
-    return '卖家拒绝发货'
+    return '卖家拒绝交付'
   }
   return statusMap[order.status] || '未知状态'
 }
@@ -333,7 +319,7 @@ function cancelNotice(order) {
   if (order.status !== 4 || order.cancelType !== 2) {
     return ''
   }
-  return order.cancelReason ? `拒绝原因：${order.cancelReason}` : '卖家拒绝发货'
+  return order.cancelReason ? `拒绝原因：${order.cancelReason}` : '卖家拒绝交付'
 }
 
 function isHideable(order) {
@@ -399,7 +385,7 @@ async function handleCancel(order) {
 }
 
 async function handleConfirm(order) {
-  const confirmed = await ElMessageBox.confirm('确认已经收到商品吗？', '确认收货', { type: 'success' })
+  const confirmed = await ElMessageBox.confirm('请在面交验货、收到商品并自行完成线下付款后确认完成。平台不代收款、不提供交易担保。', '确认完成', { type: 'success' })
     .then(() => true)
     .catch(() => false)
   if (!confirmed) {
@@ -410,35 +396,31 @@ async function handleConfirm(order) {
   try {
     await confirmOrder(order.id)
     order.status = 3
-    ElMessage.success('已确认收货')
+    ElMessage.success('已确认完成')
   } finally {
     actingId.value = null
   }
 }
 
-async function openShip(order) {
-  const result = await ElMessageBox.prompt('请输入物流单号', '发货', {
-    confirmButtonText: '确认发货',
-    inputValidator: value => (value && value.trim() ? true : '物流单号不能为空')
-  }).catch(() => null)
-
-  if (!result?.value) {
-    return
-  }
+async function handleDeliver(order) {
+  const confirmed = await ElMessageBox.confirm('请在实际面交并交付商品后确认。交付状态不代表已付款，双方应线下验货并自行付款，平台不代收款、不提供交易担保。', '确认交付', {
+    confirmButtonText: '已面交，确认交付',
+    type: 'warning'
+  }).then(() => true).catch(() => false)
+  if (!confirmed) return
 
   actingId.value = order.id
   try {
-    await shipOrder(order.id, result.value.trim())
+    await deliverOrder(order.id)
     order.status = 2
-    order.expressNo = result.value.trim()
-    ElMessage.success('发货成功')
+    ElMessage.success('已交付，等待买家确认')
   } finally {
     actingId.value = null
   }
 }
 
 async function handleReject(order) {
-  const result = await ElMessageBox.prompt('请输入拒绝原因', '拒绝发货', {
+  const result = await ElMessageBox.prompt('请输入拒绝原因', '拒绝交付', {
     confirmButtonText: '确认拒绝',
     cancelButtonText: '取消',
     inputPlaceholder: '例如：库存盘点异常'
@@ -453,8 +435,8 @@ async function handleReject(order) {
     await rejectOrder(order.id, result.value?.trim() || '')
     order.status = 4
     order.cancelType = 2
-    order.cancelReason = result.value?.trim() || '卖家拒绝发货'
-    ElMessage.success('已拒绝发货')
+    order.cancelReason = result.value?.trim() || '卖家拒绝交付'
+    ElMessage.success('已拒绝交付')
   } finally {
     actingId.value = null
   }
@@ -507,10 +489,10 @@ async function handleBatchHide() {
 
 async function handleBatchReject() {
   if (selectedPendingOrders.value.length === 0) {
-    ElMessage.warning('请先选择待发货订单')
+    ElMessage.warning('请先选择待交付订单')
     return
   }
-  const result = await ElMessageBox.prompt('请输入统一拒绝原因', '批量拒绝发货', {
+  const result = await ElMessageBox.prompt('请输入统一拒绝原因', '批量拒绝交付', {
     confirmButtonText: '确认拒绝',
     cancelButtonText: '取消',
     inputPlaceholder: '例如：库存盘点异常'
@@ -528,54 +510,35 @@ async function handleBatchReject() {
         if (successIds.includes(order.id)) {
           order.status = 4
           order.cancelType = 2
-          order.cancelReason = result.value?.trim() || '卖家拒绝发货'
+          order.cancelReason = result.value?.trim() || '卖家拒绝交付'
         }
       })
     }
   })
 }
 
-function openBatchShip() {
-  if (selectedPendingOrders.value.length === 0) {
-    ElMessage.warning('请先选择待发货订单')
-    return
-  }
-  batchShipItems.value = selectedPendingOrders.value.map(order => ({
-    orderId: order.id,
-    orderNo: order.orderNo,
-    expressNo: ''
-  }))
-  batchShipVisible.value = true
-}
+async function handleBatchDeliver() {
+  if (selectedPendingOrders.value.length === 0 || batchDeliverLoading.value) return
+  const orders = [...selectedPendingOrders.value]
+  const confirmed = await ElMessageBox.confirm(`请确认所选 ${orders.length} 笔订单均已实际面交并交付商品。交付状态不代表已付款，双方应线下验货并自行付款，平台不代收款、不提供交易担保。`, '批量确认交付', {
+    confirmButtonText: '均已面交，确认交付',
+    type: 'warning'
+  }).then(() => true).catch(() => false)
+  if (!confirmed) return
 
-async function submitBatchShip() {
-  const invalid = batchShipItems.value.find(item => !item.expressNo || !item.expressNo.trim())
-  if (invalid) {
-    ElMessage.warning(`请填写订单 ${invalid.orderNo} 的物流单号`)
-    return
-  }
-
-  batchShipLoading.value = true
+  batchDeliverLoading.value = true
   try {
-    const data = await batchShipOrders(batchShipItems.value.map(item => ({
-      orderId: item.orderId,
-      expressNo: item.expressNo.trim()
-    })))
+    const data = await batchDeliverOrders(orders.map(order => ({ orderId: order.id })))
     await applyBatchResult(data, {
-      successMessage: '批量发货完成',
+      successMessage: '批量交付完成',
       onSuccessIds: successIds => {
         list.value.forEach(order => {
-          const shipItem = batchShipItems.value.find(item => item.orderId === order.id)
-          if (shipItem && successIds.includes(order.id)) {
-            order.status = 2
-            order.expressNo = shipItem.expressNo.trim()
-          }
+          if (successIds.includes(order.id)) order.status = 2
         })
       }
     })
-    batchShipVisible.value = false
   } finally {
-    batchShipLoading.value = false
+    batchDeliverLoading.value = false
   }
 }
 
@@ -632,7 +595,8 @@ async function submitEval() {
   evalLoading.value = true
   try {
     await evaluate(evalOrderId.value, evalRating.value, evalContent.value, evalAnonymous.value)
-    evaluatedIds.add(evalOrderId.value)
+    const order = list.value.find(item => item.id === evalOrderId.value)
+    if (order) order.evaluated = true
     evalVisible.value = false
     ElMessage.success('评价成功')
   } finally {
@@ -834,18 +798,6 @@ async function submitEval() {
 .pagination-wrap {
   display: flex;
   justify-content: center;
-}
-
-.batch-ship-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.batch-ship-item__title {
-  margin-bottom: 6px;
-  font-size: $font-size-sm;
-  color: $color-text-secondary;
 }
 
 .eval-stars {

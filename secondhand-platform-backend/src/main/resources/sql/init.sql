@@ -20,7 +20,6 @@ CREATE TABLE `user` (
   `address` VARCHAR(255) DEFAULT NULL COMMENT 'default address',
   `campus` VARCHAR(100) DEFAULT NULL COMMENT 'campus/college',
   `birthday` DATE DEFAULT NULL COMMENT 'birthday',
-  `credit_score` INT DEFAULT 100 COMMENT 'credit score',
   `status` TINYINT DEFAULT 1 COMMENT 'account status',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',

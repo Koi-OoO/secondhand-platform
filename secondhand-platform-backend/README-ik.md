@@ -48,3 +48,11 @@ docker build -t campus-elasticsearch:8.19.23-ik infrastructure/elasticsearch
 更换容器时保留数据挂载及本机端口限制，不删除数据目录。磁盘水位保护保持默认。
 
 IK 来源：[项目说明](https://github.com/infinilabs/analysis-ik)、[8.19.23插件](https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.19.23.zip)。安装包版本已核对；插件安装时的旧安全策略及网络访问 entitlement 提示未隐藏，本机未配置远程词典。
+
+## AI 分支接入
+
+`ai-marketplace` 中 Python 仍调用已鉴权的 `/internal/marketplace/listings/search`。Java 的 AI 查询入口复用 `ProductSearchService`，与商品广场共享 IK 索引、筛选和展示数据；不再用旧 MySQL 搜索兜底。详情查询仍不增加浏览量。
+
+启动 Java 需开启 `PRODUCT_SEARCH_ES_ENABLED=true`，日常保持 `PRODUCT_SEARCH_ES_IMPORT_ON_STARTUP=false`，需要自动同步时开启 `PRODUCT_SEARCH_CANAL_ENABLED=true`。合并分支后重启 IDEA 后端，Python 端不需要更换接口地址；服务令牌和模型配置沿用原配置。
+
+已通过真实内部接口鉴权、IK 中文搜索、图片、零预算、分页边界及503测试（`CAMPUS_AI_ES_LIVE=true`、`AiEsSearchLiveTest`）。Python 工具客户端和 Agent 单元测试通过；本轮未调用真实收费模型，不将工具查询验收等同于真实模型端到端验收。

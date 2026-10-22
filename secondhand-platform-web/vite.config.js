@@ -42,7 +42,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        // Java 的 AI 接口自身带 /api/ai 前缀；原有商品、用户接口仍去掉 /api。
+        rewrite: (path) => /^\/api\/ai(?:\/|\?|$)/.test(path) ? path : path.replace(/^\/api/, '')
       },
       '/uploads': {
         target: 'http://localhost:8080',

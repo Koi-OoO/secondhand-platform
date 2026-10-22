@@ -22,6 +22,9 @@
       <nav class="app-header__nav" aria-label="主导航">
         <router-link to="/" class="nav-link" active-class="active">首页</router-link>
         <router-link to="/products" class="nav-link" active-class="active">商品广场</router-link>
+        <router-link to="/ai" class="nav-link nav-link--ai" active-class="active">
+          <span aria-hidden="true">✦</span> AI 助手
+        </router-link>
       </nav>
 
       <form class="header-search" role="search" @submit.prevent="handleHeaderSearch">
@@ -49,11 +52,11 @@
       <div class="app-header__actions">
         <template v-if="userStore.isLoggedIn">
           <router-link v-if="pendingCount.toShip > 0" to="/user/orders?tab=sold" class="order-alert">
-            待发货 {{ displayCount(pendingCount.toShip) }}
+            待交付 {{ displayCount(pendingCount.toShip) }}
           </router-link>
 
           <router-link v-if="pendingCount.toConfirm > 0" to="/user/orders" class="order-alert order-alert--confirm">
-            待收货 {{ displayCount(pendingCount.toConfirm) }}
+            待确认 {{ displayCount(pendingCount.toConfirm) }}
           </router-link>
 
           <router-link to="/messages" class="message-alert" :class="{ 'message-alert--active': messageStore.unreadCount > 0 }">
@@ -96,8 +99,11 @@
                   我的订单
                   <span v-if="orderBadge" class="dropdown-badge">{{ orderBadge }}</span>
                 </el-dropdown-item>
-                <el-dropdown-item divided command="logout">
-                  <el-icon><SwitchButton /></el-icon>退出登录
+                <el-dropdown-item divided command="switch-account" :disabled="userStore.switching || userStore.loading">
+                  <el-icon><Switch /></el-icon>{{ userStore.switching ? '正在切换…' : '切换账号' }}
+                </el-dropdown-item>
+                <el-dropdown-item command="logout" :disabled="userStore.switching">
+                  <el-icon><SwitchButton /></el-icon>退出全部账号
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -110,6 +116,7 @@
         </template>
       </div>
     </div>
+    <AccountManagerDialog v-model="accountManagerVisible" />
   </header>
 </template>
 
@@ -118,9 +125,10 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useMessageStore } from '@/stores/message'
-import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Shop, ChatDotRound } from '@element-plus/icons-vue'
+import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Switch, Shop, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getPendingCount } from '@/api/order'
+import AccountManagerDialog from './AccountManagerDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -128,6 +136,7 @@ const userStore = useUserStore()
 const messageStore = useMessageStore()
 const scrolled = ref(false)
 const headerKeyword = ref('')
+const accountManagerVisible = ref(false)
 const pendingCount = ref({ toShip: 0, toConfirm: 0 })
 const lastToShip = ref(null)
 const lastToConfirm = ref(null)
@@ -138,7 +147,7 @@ const tickerItems = [
   '数码专区最低 3 折起',
   '面交请选择公共区域',
   '闲置换现金',
-  '支持担保交易',
+  '支持校园面交',
   '让好物继续流转',
   '本周成交 356 单'
 ]
@@ -170,14 +179,20 @@ onUnmounted(() => {
   clearInterval(pendingTimer)
 })
 
-function handleCommand(cmd) {
+async function handleCommand(cmd) {
   switch (cmd) {
     case 'home': if (userStore.userInfo?.id) router.push(`/seller/${userStore.userInfo.id}`); break
     case 'profile': router.push('/user/profile'); break
     case 'favorites': router.push('/user/favorites'); break
     case 'messages': router.push('/messages'); break
     case 'orders': router.push('/user/orders'); break
-    case 'logout': userStore.logout(); break
+    case 'switch-account':
+      accountManagerVisible.value = true
+      break
+    case 'logout':
+      try { await userStore.logout() }
+      catch { ElMessage.error('未能退出全部账号，请检查网络后重试') }
+      break
   }
 }
 
@@ -224,7 +239,7 @@ async function pollPendingCount() {
     const shouldNotifyIncrease = lastToShip.value !== null && toShip > lastToShip.value
 
     if (shouldNotifyInitial || shouldNotifyIncrease) {
-      ElMessage.warning(`你有 ${toShip} 个订单等待发货`)
+      ElMessage.warning(`你有 ${toShip} 个订单等待交付`)
       sessionStorage.setItem(notifyKey, '1')
     }
     lastToShip.value = toShip
@@ -234,7 +249,7 @@ async function pollPendingCount() {
     const shouldConfirmIncrease = lastToConfirm.value !== null && toConfirm > lastToConfirm.value
 
     if (shouldConfirmInitial || shouldConfirmIncrease) {
-      ElMessage.info(`你有 ${toConfirm} 个订单等待确认收货`)
+      ElMessage.info(`你有 ${toConfirm} 个订单等待确认完成`)
       sessionStorage.setItem(confirmNotifyKey, '1')
     }
     lastToConfirm.value = toConfirm
@@ -438,6 +453,17 @@ async function pollPendingCount() {
     border-color: $color-ink;
     background: $color-yellow;
     box-shadow: 2px 2px 0 $color-ink;
+  }
+
+  &--ai {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+
+    > span {
+      color: $color-red;
+      font-size: 13px;
+    }
   }
 }
 

@@ -1,6 +1,8 @@
 package com.secondhand.handler;
 
 import com.secondhand.util.Result;
+import com.secondhand.service.SessionAccountService;
+import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +19,14 @@ public class GlobalExceptionHandler {
 
     // 日志记录器
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /** 登录、退出及账号管理保留真实 HTTP 状态，前端才能区别密码错误、会话过期和身份切换。 */
+    @ExceptionHandler(SessionAccountService.AccountException.class)
+    public ResponseEntity<Result> handleAccount(SessionAccountService.AccountException ex) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        if (ex.getStatus() == 409) response.header("X-Account-Changed", "true");
+        return response.body(Result.error(ex.getMessage()));
+    }
 
     /**
      * 处理参数类型不匹配异常（如：需要数字却传了字母）

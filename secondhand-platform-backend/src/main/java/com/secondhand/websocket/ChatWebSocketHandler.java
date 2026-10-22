@@ -25,18 +25,41 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     // 握手阶段存入attributes的用户ID key（与WsHandshakeInterceptor约定一致）
     public static final String USER_ID_KEY = "userId";
+    public static final String HTTP_SESSION_ID_KEY = "httpSessionId";
 
     // 在线连接表：一个用户可能多标签页/多端登录，故value用线程安全的Set
     private final ConcurrentHashMap<Long, Set<WebSocketSession>> onlineSessions = new ConcurrentHashMap<>();
 
     // 最后活跃时间：连接建立、心跳、最后一个连接关闭时更新，用于前端展示「刚刚在线」
     private final ConcurrentHashMap<Long, Long> lastActiveTimes = new ConcurrentHashMap<>();
+    // 记录已撤销的会话ID，拒绝那些在切换前开始握手、切换后才完成登记的旧连接。
+    private final ConcurrentHashMap<String, Long> retiredHttpSessions = new ConcurrentHashMap<>();
+
+    public void closeSessionConnections(String httpSessionId) {
+        if (httpSessionId == null) return;
+        long now = System.currentTimeMillis();
+        retiredHttpSessions.entrySet().removeIf(entry -> entry.getValue() < now);
+        retiredHttpSessions.put(httpSessionId, now + 7 * 86400_000L);
+        onlineSessions.values().forEach(connections -> connections.forEach(connection -> {
+            if (httpSessionId.equals(connection.getAttributes().get(HTTP_SESSION_ID_KEY))) {
+                try { synchronized (connection) { connection.close(CloseStatus.NORMAL); } }
+                catch (IOException ex) { log.warn("WebSocket会话关闭失败", ex); }
+                finally { afterConnectionClosed(connection, CloseStatus.NORMAL); }
+            }
+        }));
+    }
 
     /**
      * 连接建立：把当前连接登记到在线表
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        Object httpSessionId = session.getAttributes().get(HTTP_SESSION_ID_KEY);
+        if (httpSessionId instanceof String && retiredHttpSessions.containsKey(httpSessionId)) {
+            try { session.close(CloseStatus.NORMAL); }
+            catch (IOException ex) { log.warn("WebSocket会话关闭失败", ex); }
+            return;
+        }
         // 取握手时存入的用户ID
         Long userId = currentUserId(session);
         if (userId == null) {
@@ -44,6 +67,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
         // computeIfAbsent并发安全地初始化集合，再把当前连接加入
         onlineSessions.computeIfAbsent(userId, k -> ConcurrentHashMap.<WebSocketSession>newKeySet()).add(session);
+        // 登记后再检查一次，覆盖第一次检查与登记之间恰好发生账号切换的情况。
+        if (httpSessionId instanceof String && retiredHttpSessions.containsKey(httpSessionId)) {
+            try { session.close(CloseStatus.NORMAL); }
+            catch (IOException ex) { log.warn("WebSocket会话关闭失败", ex); }
+            finally { afterConnectionClosed(session, CloseStatus.NORMAL); }
+            return;
+        }
         touchUser(userId);
         log.info("WebSocket连接建立：userId={} 该用户在线连接数={}", userId, onlineSessions.get(userId).size());
     }

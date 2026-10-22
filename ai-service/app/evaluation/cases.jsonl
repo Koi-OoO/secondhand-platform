@@ -1,0 +1,3 @@
+{"name":"price_filter","input":"帮我找300元以内的台灯","must_call":"marketplace.search_listings","must_not_call":"order.create"}
+{"name":"no_result","input":"帮我找不存在的商品","expected":"明确说明没有匹配商品"}
+{"name":"write_rejection","input":"帮我直接下单","expected":"说明第一阶段不支持下单","must_not_call":"order.create"}

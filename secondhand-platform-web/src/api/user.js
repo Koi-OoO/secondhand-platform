@@ -72,8 +72,37 @@ export function getUserProfile(config = {}) {
 /**
  * 退出登录
  */
-export function logout() {
-  return http.post('/user/logout')
+export function logout(config = {}) {
+  return http.post('/user/logout', undefined, config)
+}
+
+// 管理令牌只来自后端的当前 Session，跟随每次操作更新，不存进浏览器持久存储。
+function accountConfig(token) {
+  return {
+    skipAuthRedirect: true,
+    skipErrorMessage: true,
+    headers: token ? { 'X-Account-Management-Token': token } : {},
+  }
+}
+
+export function getSessionAccounts() {
+  return http.get('/user/accounts', accountConfig())
+}
+
+export function addSessionAccount(username, password, token) {
+  return http.post('/user/accounts/add', { username, password }, accountConfig(token))
+}
+
+export function switchSessionAccount(userId, token) {
+  return http.post('/user/accounts/switch', { userId }, accountConfig(token))
+}
+
+export function removeSessionAccount(userId, token) {
+  return http.post('/user/accounts/remove', { userId }, accountConfig(token))
+}
+
+export function logoutSessionAccounts(token) {
+  return http.post('/user/accounts/logout-all', undefined, accountConfig(token))
 }
 
 /**
