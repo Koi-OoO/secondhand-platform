@@ -35,11 +35,14 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public Result login(String username, String password) {
+        if (username == null || username.isBlank() || password == null || password.isEmpty()) {
+            return Result.error("账号或密码错误");
+        }
         // 先按用户名查出用户，再校验密码是否正确
         User user = userMapper.selectByUsername(username);
 
         // 用户不存在或密码错误统一返回同一提示，避免暴露账号是否已注册（防枚举）
-        if (user == null || !PasswordUtil.verify(password, user.getPassword())) {
+        if (user == null || !Integer.valueOf(1).equals(user.getStatus()) || !PasswordUtil.verify(password, user.getPassword())) {
             return Result.error("账号或密码错误");
         }
 

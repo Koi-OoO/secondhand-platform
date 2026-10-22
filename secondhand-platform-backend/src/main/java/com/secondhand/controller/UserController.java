@@ -11,6 +11,7 @@ import com.secondhand.entity.EmailUnbindRequest;
 import com.secondhand.service.AccountSecurityService;
 import com.secondhand.service.PasswordResetService;
 import com.secondhand.service.UserService;
+import com.secondhand.service.SessionAccountService;
 import com.secondhand.util.Result;
 import com.secondhand.util.SessionUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +21,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,6 +43,9 @@ public class UserController {
 
     @Autowired  // 自动注入UserService
     private UserService userService;
+
+    @Autowired
+    private SessionAccountService sessionAccountService;
 
     @Autowired
     private PasswordResetService passwordResetService;
@@ -122,7 +127,8 @@ public class UserController {
                             required = true,
                             content = @Content(schema = @Schema(implementation = User.class)))
                         @RequestBody User user,
-                        @Parameter(hidden = true) HttpSession session) {
+                        @Parameter(hidden = true) HttpServletRequest request) {
+        sessionAccountService.checkOrigin(request);
         // 调用service层校验登录
         Result r = userService.login(user.getUsername(), user.getPassword());
         // 登录成功（code=200）
@@ -130,7 +136,7 @@ public class UserController {
             // 获取完整用户信息
             User u = userService.getUserByUsername(user.getUsername());
             // 将用户信息存入session
-            SessionUtil.login(session, u);
+            sessionAccountService.establishLogin(request, u);
         }
         // 返回登录结果
         return r;
@@ -223,6 +229,11 @@ public class UserController {
         user.setUsername(null);
         user.setEmail(null);
         user.setEmailVerified(null);
+        user.setRole(null);
+        user.setStatus(null);
+        user.setCreditScore(null);
+        user.setCreateTime(null);
+        user.setUpdateTime(null);
         // 调用service更新
         boolean ok = userService.updateById(user);
         // 更新成功
@@ -230,7 +241,10 @@ public class UserController {
             // 查询最新用户信息
             User latest = userService.getUserById(userId);
             // 更新session中的用户信息
-            SessionUtil.login(session, latest);
+            synchronized (session) {
+                User active = SessionUtil.getSessionUser(session);
+                if (active != null && userId.equals(active.getId())) SessionUtil.login(session, latest);
+            }
             return Result.success("更新成功");
         }
         // 更新失败
@@ -242,9 +256,11 @@ public class UserController {
      */
     @PostMapping("/logout")  // 处理POST请求，路径为 /user/logout
     @Operation(summary = "退出登录", description = "需要登录，清空当前会话")
-    public Result logout(@Parameter(hidden = true) HttpSession session) {
+    public Result logout(@Parameter(hidden = true) HttpServletRequest request) {
+        sessionAccountService.checkOrigin(request);
+        HttpSession session = request.getSession(false);
         // 清空session中的用户信息
-        SessionUtil.logout(session);
+        if (session != null) sessionAccountService.logout(session);
         // 返回成功
         return Result.success("已退出");
     }

@@ -2,6 +2,8 @@ package com.secondhand.interceptor;
 
 import com.secondhand.entity.User;
 import com.secondhand.util.SessionUtil;
+import com.secondhand.service.SessionAccountService;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.secondhand.websocket.ChatWebSocketHandler;
 import java.util.Map;
 import javax.servlet.http.HttpSession;
@@ -20,6 +22,8 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
  */
 @Component  // 注册为Spring Bean，供WebSocketConfig注入
 public class WsHandshakeInterceptor implements HandshakeInterceptor {
+    @Autowired(required = false)
+    private SessionAccountService sessionAccountService;
 
     /**
      * 握手前校验登录，并把用户 ID 放入 attributes（供 Handler 使用）
@@ -32,11 +36,20 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
             // 取已存在的HttpSession（不新建）；Spring Session下其背后由Redis托管
             HttpSession session = ((ServletServerHttpRequest) request).getServletRequest().getSession(false);
             if (session != null) {
+                // 先固定本次握手的会话ID。验证期间若发生切换，只能登记到会被撤销的旧ID。
+                String httpSessionId = session.getId();
                 // 复用SessionUtil取登录用户（与普通接口同一套登录态）
-                User user = SessionUtil.getUser(session);
+                User user = sessionAccountService == null ? SessionUtil.getSessionUser(session) : sessionAccountService.validateCurrent(session);
                 if (user != null) {
+                    // 浏览器标签页可能仍展示切换前的账号，不能仅凭共享 Cookie 接入新账号私信。
+                    String expected = ((ServletServerHttpRequest) request).getServletRequest().getParameter("activeUserId");
+                    if (expected != null && !expected.equals(user.getId().toString())) {
+                        response.setStatusCode(HttpStatus.CONFLICT);
+                        return false;
+                    }
                     // 把用户ID存入握手attributes，连接建立后Handler可读取
                     attributes.put(ChatWebSocketHandler.USER_ID_KEY, user.getId());
+                    attributes.put(ChatWebSocketHandler.HTTP_SESSION_ID_KEY, httpSessionId);
                     return true;  // 放行握手
                 }
             }

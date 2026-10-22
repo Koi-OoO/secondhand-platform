@@ -12,6 +12,18 @@ import static org.mockito.Mockito.when;
 
 class UserControllerTest {
 
+    @Test void profileUpdateCannotSetPrivilegeOrStatus() {
+        UserService users = mock(UserService.class);
+        org.springframework.mock.web.MockHttpSession session = new org.springframework.mock.web.MockHttpSession();
+        User current = new User(); current.setId(7L); com.secondhand.util.SessionUtil.login(session, current);
+        User body = new User(); body.setRole("ADMIN"); body.setStatus(1);
+        UserController controller = new UserController(); ReflectionTestUtils.setField(controller, "userService", users);
+        controller.update(body, session);
+        org.mockito.ArgumentCaptor<User> argument = org.mockito.ArgumentCaptor.forClass(User.class);
+        org.mockito.Mockito.verify(users).updateById(argument.capture());
+        assertThat(argument.getValue().getRole()).isNull(); assertThat(argument.getValue().getStatus()).isNull();
+    }
+
     @Test
     void publicProfileReturnsUserWithoutPassword() {
         UserService userService = mock(UserService.class);

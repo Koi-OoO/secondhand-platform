@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { getRequestUserId } from '../utils/requestIdentity'
 
 // 创建 Axios 实例
 const http = axios.create({
@@ -12,6 +13,8 @@ const http = axios.create({
 // === 请求拦截器 ===
 http.interceptors.request.use(
   config => {
+    const userId = getRequestUserId()
+    if (userId) config.headers['X-Active-User-Id'] = userId
     if (!(config.data instanceof FormData)) {
       config.headers['Content-Type'] = 'application/json'
     }
@@ -33,6 +36,11 @@ http.interceptors.response.use(
   error => {
     if (error.response) {
       const msg = error.response.data?.message
+      if (error.response.status === 409 && error.response.headers?.['x-account-changed'] === 'true') {
+        // 另一个标签页已切换账号：刷新展示实际身份，不重试刚才的业务操作。
+        window.location.reload()
+        return Promise.reject(error)
+      }
       if (error.response.status === 401) {
         if (error.config?.skipAuthRedirect) {
           return Promise.reject(error)

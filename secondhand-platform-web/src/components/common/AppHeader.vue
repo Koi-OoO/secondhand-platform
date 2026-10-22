@@ -99,8 +99,11 @@
                   我的订单
                   <span v-if="orderBadge" class="dropdown-badge">{{ orderBadge }}</span>
                 </el-dropdown-item>
-                <el-dropdown-item divided command="logout">
-                  <el-icon><SwitchButton /></el-icon>退出登录
+                <el-dropdown-item divided command="switch-account" :disabled="userStore.switching || userStore.loading">
+                  <el-icon><Switch /></el-icon>{{ userStore.switching ? '正在切换…' : '切换账号' }}
+                </el-dropdown-item>
+                <el-dropdown-item command="logout" :disabled="userStore.switching">
+                  <el-icon><SwitchButton /></el-icon>退出全部账号
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -113,6 +116,7 @@
         </template>
       </div>
     </div>
+    <AccountManagerDialog v-model="accountManagerVisible" />
   </header>
 </template>
 
@@ -121,9 +125,10 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useMessageStore } from '@/stores/message'
-import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Shop, ChatDotRound } from '@element-plus/icons-vue'
+import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Switch, Shop, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getPendingCount } from '@/api/order'
+import AccountManagerDialog from './AccountManagerDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -131,6 +136,7 @@ const userStore = useUserStore()
 const messageStore = useMessageStore()
 const scrolled = ref(false)
 const headerKeyword = ref('')
+const accountManagerVisible = ref(false)
 const pendingCount = ref({ toShip: 0, toConfirm: 0 })
 const lastToShip = ref(null)
 const lastToConfirm = ref(null)
@@ -173,14 +179,20 @@ onUnmounted(() => {
   clearInterval(pendingTimer)
 })
 
-function handleCommand(cmd) {
+async function handleCommand(cmd) {
   switch (cmd) {
     case 'home': if (userStore.userInfo?.id) router.push(`/seller/${userStore.userInfo.id}`); break
     case 'profile': router.push('/user/profile'); break
     case 'favorites': router.push('/user/favorites'); break
     case 'messages': router.push('/messages'); break
     case 'orders': router.push('/user/orders'); break
-    case 'logout': userStore.logout(); break
+    case 'switch-account':
+      accountManagerVisible.value = true
+      break
+    case 'logout':
+      try { await userStore.logout() }
+      catch { ElMessage.error('未能退出全部账号，请检查网络后重试') }
+      break
   }
 }
 
@@ -237,7 +249,7 @@ async function pollPendingCount() {
     const shouldConfirmIncrease = lastToConfirm.value !== null && toConfirm > lastToConfirm.value
 
     if (shouldConfirmInitial || shouldConfirmIncrease) {
-      ElMessage.info(`你有 ${toConfirm} 个订单等待确认收货`)
+      ElMessage.info(`你有 ${toConfirm} 个订单等待收货完成`)
       sessionStorage.setItem(confirmNotifyKey, '1')
     }
     lastToConfirm.value = toConfirm

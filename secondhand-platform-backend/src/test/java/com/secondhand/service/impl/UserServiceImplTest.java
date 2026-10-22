@@ -15,6 +15,16 @@ import static org.mockito.Mockito.when;
 class UserServiceImplTest {
 
     @Test
+    void loginRejectsDisabledAccountAndNullCredentials() {
+        UserMapper mapper = mock(UserMapper.class);
+        User disabled = new User(); disabled.setStatus(0); disabled.setPassword(com.secondhand.util.PasswordUtil.encrypt("secret"));
+        when(mapper.selectByUsername("disabled")).thenReturn(disabled);
+        UserServiceImpl service = new UserServiceImpl(); ReflectionTestUtils.setField(service, "userMapper", mapper);
+        assertThat(service.login("disabled", "secret").getCode()).isEqualTo(500);
+        assertThat(service.login(null, null).getCode()).isEqualTo(500);
+    }
+
+    @Test
     void registerGeneratesDefaultNicknameWhenMissing() {
         UserMapper userMapper = mock(UserMapper.class);
         when(userMapper.selectByUsername("new_user")).thenReturn(null);
