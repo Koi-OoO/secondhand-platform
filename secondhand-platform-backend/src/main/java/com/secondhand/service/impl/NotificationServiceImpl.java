@@ -55,10 +55,29 @@ public class NotificationServiceImpl implements NotificationService {
             payload.put("type", "notification");  // 前端按type分发
             payload.put("data", n);  // 通知本体
             // 用Hutool序列化为纯JSON（不带@class，避免RedisTemplate那套typing污染）
-            chatWebSocketHandler.sendToUser(userId, JSONUtil.toJsonStr(payload));
+            String json = JSONUtil.toJsonStr(payload);
+            // 通知记录参与原业务事务；仅提交成功后发送实时提醒。
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()
+                    && org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() { pushSafely(userId, json); }
+                    });
+            } else {
+                pushSafely(userId, json);
+            }
         } catch (Exception ex) {
             // 通知失败仅记日志，不向上抛出
             log.error("发送通知失败：userId={} type={}", userId, type, ex);
+        }
+    }
+
+    private void pushSafely(Long userId, String json) {
+        try {
+            chatWebSocketHandler.sendToUser(userId, json);
+        } catch (Exception ex) {
+            log.error("实时通知推送失败：userId={}", userId, ex);
         }
     }
 
@@ -78,7 +97,7 @@ public class NotificationServiceImpl implements NotificationService {
         // 查询条件：本人通知，按创建时间倒序
         LambdaQueryWrapper<Notification> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Notification::getUserId, userId)
-                .orderByDesc(Notification::getCreateTime);
+                .orderByDesc(Notification::getCreateTime).orderByDesc(Notification::getId);
         // 分页查询
         Page<Notification> pageObj = new Page<>(page, size);
         IPage<Notification> result = notificationMapper.selectPage(pageObj, wrapper);

@@ -230,6 +230,12 @@ public class ProductServiceImpl implements ProductService {
             return Result.error("商品信息不能为空");
         }
 
+        if (product.getTradeLocation() == null || product.getTradeLocation().trim().isEmpty()
+                || product.getTradeLocation().trim().length() > 200) {
+            return Result.error("请填写面交地点，长度不超过200个字符");
+        }
+        product.setTradeLocation(product.getTradeLocation().trim());
+
         // 标题校验：2-100字符
         if (product.getTitle() == null || product.getTitle().trim().length() < 2
                 || product.getTitle().trim().length() > 100) {
@@ -375,6 +381,14 @@ public class ProductServiceImpl implements ProductService {
      * 校验商品编辑请求参数
      */
     private Result validateProductUpdate(Product product, Integer originalCategoryId) {
+        if (product.getTradeLocation() != null) {
+            String location = product.getTradeLocation().trim();
+            if (location.isEmpty() || location.length() > 200) {
+                return Result.error("请填写面交地点，长度不超过200个字符");
+            }
+            product.setTradeLocation(location);
+        }
+
         // 标题校验
         if (product.getTitle() != null) {
             int titleLength = product.getTitle().trim().length();

@@ -1,3 +1,4 @@
+# 测试 Python 到 Java 的请求和响应转换；MockTransport 在本地模拟 HTTP，不需要启动 Java。
 import httpx
 import pytest
 
@@ -7,6 +8,7 @@ from app.tools.java_client import JavaMarketplaceClient, JavaServiceError
 
 @pytest.mark.asyncio
 async def test_search_listings_parses_java_result_and_sends_context_headers() -> None:
+    # 1. 记录发出的请求，并返回一份模拟 Java Result 的 JSON。
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -33,6 +35,7 @@ async def test_search_listings_parses_java_result_and_sends_context_headers() ->
             },
         )
 
+    # 2. 把模拟传输层交给客户端，检查的仍是真实客户端中的请求构造与解析代码。
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     client = JavaMarketplaceClient(
         base_url="http://java.test",
@@ -42,6 +45,7 @@ async def test_search_listings_parses_java_result_and_sends_context_headers() ->
         http_client=http_client,
     )
 
+    # 3. 发起查询，再检查商品卡片、查询参数和服务鉴权请求头是否正确。
     cards = await client.search_listings(keyword="台灯", size=10)
 
     assert cards[0].product_id == 10
@@ -56,6 +60,7 @@ async def test_search_listings_parses_java_result_and_sends_context_headers() ->
 
 @pytest.mark.asyncio
 async def test_java_business_error_raises_clear_exception() -> None:
+    # HTTP 200 不等于业务成功，JSON 中 code=500 仍必须报错。
     http_client = httpx.AsyncClient(
         transport=httpx.MockTransport(
             lambda request: httpx.Response(200, json={"code": 500, "message": "查询失败", "data": None})
@@ -70,6 +75,7 @@ async def test_java_business_error_raises_clear_exception() -> None:
 
 @pytest.mark.asyncio
 async def test_java_http_5xx_raises_clear_exception() -> None:
+    # HTTP 503 等服务故障应返回明确错误，不能伪装成没有匹配商品。
     http_client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(503, json={"message": "down"}))
     )
@@ -82,6 +88,7 @@ async def test_java_http_5xx_raises_clear_exception() -> None:
 
 @pytest.mark.asyncio
 async def test_search_rejects_invalid_price_and_size_before_http_call() -> None:
+    # 非法参数应在发送 HTTP 前被拒绝；因此测试不需要任何响应替身。
     client = JavaMarketplaceClient(base_url="http://java.test", internal_token="token")
 
     with pytest.raises(ValueError):

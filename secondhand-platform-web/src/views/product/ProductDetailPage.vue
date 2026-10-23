@@ -254,14 +254,17 @@ async function onWant() {
     ElMessage.warning('请先登录')
     return
   }
-  const { value: address } = await ElMessageBox.prompt('请输入交易地点（如东区食堂门口）', '确认下单', {
-    confirmButtonText: '下单',
-    inputValidator: value => (value && value.trim() ? true : '交易地点不能为空')
-  }).catch(() => ({ value: null }))
-
+  const address = product.value.tradeLocation?.trim()
   if (!address) {
+    ElMessage.warning('卖家尚未设置面交地点，请联系卖家补充后再下单')
     return
   }
+  const confirmed = await ElMessageBox.confirm(
+    `面交地点：${address}。下单后按此地点交易；如需调整，请通过站内聊天协商。`,
+    '确认下单',
+    { confirmButtonText: '确认下单', cancelButtonText: '取消', type: 'info' }
+  ).then(() => true).catch(() => false)
+  if (!confirmed || wantLoading.value) return
 
   wantLoading.value = true
   try {

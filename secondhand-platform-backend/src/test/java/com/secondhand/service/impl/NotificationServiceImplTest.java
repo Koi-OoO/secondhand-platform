@@ -47,6 +47,24 @@ class NotificationServiceImplTest {
     }
 
     @Test
+    void transactionalNotificationPushesOnlyAfterCommit() {
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            service.notifyUser(5L, "order", "新订单", "内容", 100L);
+            verify(notificationMapper).insert(any(Notification.class));
+            verify(chatWebSocketHandler, never()).sendToUser(any(), anyString());
+            for (var callback : org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()) {
+                callback.afterCommit();
+            }
+            verify(chatWebSocketHandler).sendToUser(eq(5L), anyString());
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
+    }
+
+    @Test
     void notifyUserPersistsNotificationAndPushes() {
         service.notifyUser(5L, "order", "新订单", "请尽快发货", 100L);
 

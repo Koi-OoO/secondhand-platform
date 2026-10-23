@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { totalUnread } from '@/utils/notification'
+import { computed, ref } from 'vue'
 import { ElNotification } from 'element-plus'
 import { getConversations, getMessageUnreadCount, getOnlineStatus } from '@/api/message'
 import { getNotificationUnreadCount } from '@/api/notification'
@@ -20,6 +21,7 @@ export const useMessageStore = defineStore('message', () => {
   const conversations = ref([])
   const unreadCount = ref(0)
   const notificationUnreadCount = ref(0)
+  const totalUnreadCount = computed(() => totalUnread(unreadCount.value, notificationUnreadCount.value))
   const connected = ref(false)
   const connecting = ref(false)
   const latestChatMessage = ref(null)
@@ -273,6 +275,7 @@ export const useMessageStore = defineStore('message', () => {
     conversations,
     unreadCount,
     notificationUnreadCount,
+    totalUnreadCount,
     connected,
     connecting,
     latestChatMessage,

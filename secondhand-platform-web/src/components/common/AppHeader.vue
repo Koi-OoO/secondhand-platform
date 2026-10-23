@@ -51,18 +51,19 @@
 
       <div class="app-header__actions">
         <template v-if="userStore.isLoggedIn">
+          <router-link v-if="pendingCount.toAccept > 0" to="/user/orders?tab=sold" class="order-alert">待接单 {{ displayCount(pendingCount.toAccept) }}</router-link>
           <router-link v-if="pendingCount.toShip > 0" to="/user/orders?tab=sold" class="order-alert">
-            待交付 {{ displayCount(pendingCount.toShip) }}
+            待面交 {{ displayCount(pendingCount.toShip) }}
           </router-link>
 
           <router-link v-if="pendingCount.toConfirm > 0" to="/user/orders" class="order-alert order-alert--confirm">
             待确认 {{ displayCount(pendingCount.toConfirm) }}
           </router-link>
 
-          <router-link to="/messages" class="message-alert" :class="{ 'message-alert--active': messageStore.unreadCount > 0 }">
+          <router-link :to="messageStore.notificationUnreadCount > 0 ? '/messages?tab=notifications' : '/messages'" class="message-alert" :class="{ 'message-alert--active': messageStore.totalUnreadCount > 0 }">
             <el-icon><ChatDotRound /></el-icon>
             <span>消息</span>
-            <b v-if="messageStore.unreadCount > 0">{{ displayCount(messageStore.unreadCount) }}</b>
+            <b v-if="messageStore.totalUnreadCount > 0">{{ displayCount(messageStore.totalUnreadCount) }}</b>
           </router-link>
 
           <router-link to="/product/publish" class="btn-publish">
@@ -92,7 +93,7 @@
                 <el-dropdown-item command="messages">
                   <el-icon><ChatDotRound /></el-icon>
                   消息中心
-                  <span v-if="messageStore.unreadCount > 0" class="dropdown-badge">{{ displayCount(messageStore.unreadCount) }}</span>
+                  <span v-if="messageStore.totalUnreadCount > 0" class="dropdown-badge">{{ displayCount(messageStore.totalUnreadCount) }}</span>
                 </el-dropdown-item>
                 <el-dropdown-item command="orders">
                   <el-icon><Document /></el-icon>
@@ -137,7 +138,7 @@ const messageStore = useMessageStore()
 const scrolled = ref(false)
 const headerKeyword = ref('')
 const accountManagerVisible = ref(false)
-const pendingCount = ref({ toShip: 0, toConfirm: 0 })
+const pendingCount = ref({ toAccept: 0, toShip: 0, toConfirm: 0 })
 const lastToShip = ref(null)
 const lastToConfirm = ref(null)
 let pendingTimer = null
@@ -153,7 +154,7 @@ const tickerItems = [
 ]
 
 const orderBadge = computed(() => {
-  const total = Number(pendingCount.value.toShip || 0) + Number(pendingCount.value.toConfirm || 0)
+  const total = Number(pendingCount.value.toAccept || 0) + Number(pendingCount.value.toShip || 0) + Number(pendingCount.value.toConfirm || 0)
   return total > 0 ? displayCount(total) : ''
 })
 
@@ -219,7 +220,7 @@ function clearHeaderSearch() {
 
 async function pollPendingCount() {
   if (!userStore.isLoggedIn) {
-    pendingCount.value = { toShip: 0, toConfirm: 0 }
+    pendingCount.value = { toAccept: 0, toShip: 0, toConfirm: 0 }
     lastToShip.value = null
     lastToConfirm.value = null
     return
@@ -230,6 +231,7 @@ async function pollPendingCount() {
     const toShip = Number(data?.toShip || 0)
     const toConfirm = Number(data?.toConfirm || 0)
     pendingCount.value = {
+      toAccept: Number(data?.toAccept || 0),
       toShip,
       toConfirm
     }
@@ -239,7 +241,7 @@ async function pollPendingCount() {
     const shouldNotifyIncrease = lastToShip.value !== null && toShip > lastToShip.value
 
     if (shouldNotifyInitial || shouldNotifyIncrease) {
-      ElMessage.warning(`你有 ${toShip} 个订单等待交付`)
+      ElMessage.warning(`你有 ${toShip} 个订单等待面交`)
       sessionStorage.setItem(notifyKey, '1')
     }
     lastToShip.value = toShip

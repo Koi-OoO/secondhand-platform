@@ -1,3 +1,4 @@
+# 测试接口鉴权与错误状态；TestClient 直接调用 FastAPI 应用，不需要启动 Uvicorn。
 import pytest
 from fastapi.testclient import TestClient
 
@@ -6,12 +7,14 @@ from app.core.config import Settings, settings
 
 
 def test_health_does_not_require_internal_token() -> None:
+    # 健康检查允许匿名访问，方便判断 Python 服务是否能接收请求。
     client = TestClient(app)
     response = client.get("/health")
     assert response.status_code == 200
 
 
 def test_agent_route_rejects_missing_internal_token() -> None:
+    # 未提供内部服务令牌时，在执行 Agent 前返回 401。
     client = TestClient(app)
     response = client.post(
         "/internal/agent/chat",
@@ -21,6 +24,7 @@ def test_agent_route_rejects_missing_internal_token() -> None:
 
 
 def test_agent_route_rejects_wrong_internal_token() -> None:
+    # 传了请求头也必须校验内容，错误令牌同样返回 401。
     client = TestClient(app)
     response = client.post(
         "/internal/agent/chat",
@@ -31,6 +35,7 @@ def test_agent_route_rejects_wrong_internal_token() -> None:
 
 
 def test_agent_route_returns_stable_503_when_model_is_not_configured(monkeypatch) -> None:
+    # 临时覆盖配置模拟缺少模型；monkeypatch 在测试结束后恢复原值。
     monkeypatch.setattr('app.agent.runtime.settings.model_name', None)
     client = TestClient(app)
     response = client.post(
@@ -48,5 +53,6 @@ def test_agent_route_returns_stable_503_when_model_is_not_configured(monkeypatch
 
 
 def test_production_settings_reject_default_internal_token() -> None:
+    # 防止把开发环境共用的默认令牌直接用于生产部署。
     with pytest.raises(ValueError, match="INTERNAL_TOKEN"):
         Settings(app_env="production", internal_token="dev-ai-internal-token")

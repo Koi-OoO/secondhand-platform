@@ -1,3 +1,4 @@
+-- Destructive bootstrap for an EMPTY/disposable database only. Existing databases must use incremental migrations.
 -- secondhand platform bootstrap schema
 
 CREATE DATABASE IF NOT EXISTS `secondhand`
@@ -80,19 +81,28 @@ CREATE TABLE `order` (
   `buyer_id` BIGINT NOT NULL COMMENT 'buyer user id',
   `seller_id` BIGINT NOT NULL COMMENT 'seller user id',
   `product_id` BIGINT NOT NULL COMMENT 'product id',
+  `snapshot_title` VARCHAR(100) DEFAULT NULL COMMENT 'product title snapshot',
+  `snapshot_image` VARCHAR(1000) DEFAULT NULL COMMENT 'product cover snapshot',
+  `unit_price` DECIMAL(10,2) DEFAULT NULL COMMENT 'unit price snapshot',
+  `cancel_time` DATETIME DEFAULT NULL COMMENT 'cancelled at',
   `quantity` INT NOT NULL DEFAULT 1 COMMENT 'purchase quantity',
   `product_amount` DECIMAL(10,2) NOT NULL COMMENT 'product subtotal',
   `freight` DECIMAL(10,2) DEFAULT 0 COMMENT 'shipping fee',
   `total_amount` DECIMAL(10,2) NOT NULL COMMENT 'paid total amount',
   `address` VARCHAR(500) NOT NULL COMMENT 'shipping address',
   `express_no` VARCHAR(50) DEFAULT NULL COMMENT 'tracking number',
-  `status` TINYINT DEFAULT 1 COMMENT '1=to ship, 2=to receive, 3=completed, 4=cancelled',
+  `status` TINYINT DEFAULT 1 COMMENT '1=await meetup, 2=await confirmation, 3=completed, 4=cancelled, 5=await seller acceptance, 6=await negotiation',
   `buyer_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT 'hidden in buyer view',
   `seller_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT 'hidden in seller view',
   `cancel_type` TINYINT DEFAULT NULL COMMENT '1=buyer cancelled, 2=seller rejected shipment',
   `cancel_reason` VARCHAR(255) DEFAULT NULL COMMENT 'cancel or reject reason',
   `pay_time` DATETIME DEFAULT NULL COMMENT 'paid at',
-  `deliver_time` DATETIME DEFAULT NULL COMMENT 'shipped at',
+  `delivery_issue` VARCHAR(500) DEFAULT NULL,
+  `delivery_issue_time` DATETIME DEFAULT NULL,
+  `last_remind_time` DATETIME DEFAULT NULL,
+  `meetup_time` DATETIME DEFAULT NULL COMMENT 'buyer confirmed meetup time',
+  `accept_time` DATETIME DEFAULT NULL COMMENT 'seller accepted at',
+  `deliver_time` DATETIME DEFAULT NULL COMMENT 'handed over at',
   `finish_time` DATETIME DEFAULT NULL COMMENT 'completed at',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
   PRIMARY KEY (`id`),
@@ -133,6 +143,7 @@ CREATE TABLE `message` (
   `from_user_id` BIGINT NOT NULL COMMENT 'sender user id',
   `to_user_id` BIGINT NOT NULL COMMENT 'receiver user id',
   `product_id` BIGINT DEFAULT NULL COMMENT 'related product id, nullable',
+  `meetup_proposal_id` BIGINT DEFAULT NULL COMMENT 'meetup proposal reference',
   `content` VARCHAR(1000) NOT NULL COMMENT 'message content',
   `is_read` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'read by receiver',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
@@ -180,3 +191,19 @@ INSERT INTO `category` (`name`, `parent_id`, `sort`) VALUES
   ('图书教材', 0, 5),
   ('运动户外', 0, 6),
   ('其他', 0, 99);
+
+DROP TABLE IF EXISTS `meetup_proposal`;
+CREATE TABLE IF NOT EXISTS `meetup_proposal` (
+ `id` BIGINT NOT NULL AUTO_INCREMENT,
+ `order_id` BIGINT NOT NULL,
+ `seller_id` BIGINT NOT NULL,
+ `buyer_id` BIGINT NOT NULL,
+ `order_no` VARCHAR(32) NULL,
+ `product_title` VARCHAR(100) NULL,
+ `address` VARCHAR(500) NULL,
+ `proposed_time` DATETIME NOT NULL,
+ `status` VARCHAR(16) NOT NULL,
+ `create_time` DATETIME NOT NULL,
+ `responded_time` DATETIME NULL,
+ PRIMARY KEY (`id`), KEY `idx_order_status` (`order_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='meetup proposal history';

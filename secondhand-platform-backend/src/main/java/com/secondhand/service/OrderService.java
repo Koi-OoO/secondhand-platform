@@ -10,6 +10,17 @@ import java.util.List;
  * 确认收到、批量处理以及历史记录隐藏等场景。
  */
 public interface OrderService {
+    Result remindBuyer(Long sellerId, Long orderId);
+    Result reportDeliveryIssue(Long buyerId, Long orderId, String issue);
+
+
+    /** 卖家接单：待接单进入待面交，不再次扣库存。 */
+    Result acceptOrder(Long sellerId, Long orderId);
+
+    /** 查询当前用户与指定对方之间的订单，遵守本人隐藏标记。 */
+    Result getOrdersWithUser(Long userId, Long peerId, Integer page, Integer size);
+
+    Result getOrderDetail(Long userId, Long orderId);
 
     /**
      * 创建订单并扣减库存

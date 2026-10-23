@@ -28,3 +28,22 @@ test('meetup delivery sends no logistics or payment data and preserves partial b
     await vite.close()
   }
 })
+
+test('chat orders request is scoped to peer and sends pagination without impersonating viewer', async () => {
+  const vite = await createServer({ configFile: false, resolve: { preserveSymlinks: true }, optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, watch: null } })
+  try {
+    const { default: http } = await vite.ssrLoadModule('/src/api/index.js')
+    const api = await vite.ssrLoadModule('/src/api/order.js')
+    assert.equal(typeof api.getOrdersWithUser, 'function')
+    let request
+    http.defaults.adapter = async config => {
+      request = config
+      return { data: { code: 200, data: { records: [], total: 0 } }, config, status: 200, headers: {} }
+    }
+    const data = await api.getOrdersWithUser(30, { page: 2, size: 10 })
+    assert.deepEqual(data, { records: [], total: 0 })
+    assert.equal(request.method, 'get')
+    assert.equal(request.url, '/order/with-user/30')
+    assert.deepEqual(request.params, { page: 2, size: 10 })
+  } finally { await vite.close() }
+})

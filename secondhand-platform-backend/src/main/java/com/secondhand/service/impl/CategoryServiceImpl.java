@@ -22,8 +22,9 @@ public class CategoryServiceImpl implements CategoryService {
      * 查询分类树（带缓存）
      */
     @Override
-    @Cacheable(value = "category", key = "'tree'", unless = "#result.data == null")
-    // 缓存注解：缓存名category，key固定为tree，当返回结果data为null时不缓存
+    @Cacheable(value = "category", key = "'tree'", unless = "#result.data == null",
+            condition = "@environment.getProperty('app.cache.category.enabled', T(java.lang.Boolean), true)")
+    // 默认启用缓存；对照压测时关闭开关，会同时绕过缓存读取和写入，保留相同数据库查询逻辑。
     public Result listAll() {
         // 查询所有顶级分类（parent_id为0）
         List<Category> topCategories = categoryMapper.selectTopCategories();

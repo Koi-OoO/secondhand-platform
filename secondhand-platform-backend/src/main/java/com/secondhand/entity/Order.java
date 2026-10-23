@@ -33,6 +33,21 @@ public class Order {
     @Schema(description = "商品 ID")
     private Long productId;
 
+    @Schema(description = "下单时商品名称，历史订单可能为空")
+    private String snapshotTitle;
+
+    @Schema(description = "下单时商品封面，未上传图片则为空")
+    private String snapshotImage;
+
+    @Schema(description = "下单时单价，历史订单可能为空")
+    private BigDecimal unitPrice;
+
+    @Schema(description = "取消或拒绝交付时间，旧记录可能未保存")
+    private Date cancelTime;
+
+    @TableField(exist = false)
+    private Evaluation evaluation;
+
     @Schema(description = "购买数量，必须大于 0", example = "2")
     private Integer quantity;
 
@@ -48,10 +63,17 @@ public class Order {
     @Schema(description = "面交地点")
     private String address;
 
+    @Schema(description = "买家确认的面交时间，未确认则为空")
+    private Date meetupTime;
+    @Schema(description = "买家交付问题反馈，完成后仍保留历史")
+    private String deliveryIssue;
+    private Date deliveryIssueTime;
+    private Date lastRemindTime;
+
     @Schema(description = "快递单号")
     private String expressNo;
 
-    @Schema(description = "订单状态：1=待交付，2=待确认，3=已完成，4=已取消")
+    @Schema(description = "订单状态：1=待面交，2=待确认，3=已完成，4=已取消，5=待卖家接单，6=交易待协商")
     private Integer status;
 
     @Schema(description = "买家视角是否隐藏：0=否，1=是", example = "0")
@@ -68,6 +90,9 @@ public class Order {
 
     @Schema(description = "支付时间", accessMode = Schema.AccessMode.READ_ONLY)
     private Date payTime;
+
+    @Schema(description = "卖家接单时间", accessMode = Schema.AccessMode.READ_ONLY)
+    private Date acceptTime;
 
     @Schema(description = "卖家确认交付时间", accessMode = Schema.AccessMode.READ_ONLY)
     private Date deliverTime;

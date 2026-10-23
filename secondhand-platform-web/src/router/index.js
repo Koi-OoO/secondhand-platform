@@ -4,6 +4,12 @@ import { getUserProfile } from '@/api/user'
 
 const routes = [
   {
+    path: '/order/:id',
+    name: 'OrderDetail',
+    component: () => import('@/views/user/OrderDetailPage.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
     path: '/seller/:id',
     name: 'SellerProfile',
     component: () => import('@/views/user/SellerProfilePage.vue'),

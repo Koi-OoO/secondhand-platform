@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Public Java facade for the Python marketplace agent. */
 @RestController
-@RequestMapping("/api/ai")
+@RequestMapping("/api/ai") 
 public class AiChatController {
     private final AiServiceClient aiServiceClient;
 

@@ -55,3 +55,18 @@ export function batchRejectOrders(orderIds, reason) {
 export function getPendingCount() {
   return http.get('/order/pending-count')
 }
+
+export function getOrderDetail(id) {
+  return http.get(`/order/${id}`)
+}
+
+export function acceptOrder(id) {
+  return http.put(`/order/${id}/accept`)
+}
+
+export function getOrdersWithUser(peerId, params = {}) {
+  return http.get(`/order/with-user/${peerId}`, { params })
+}
+
+export function remindBuyer(id) { return http.put(`/order/${id}/remind`) }
+export function reportDeliveryIssue(id, issue) { return http.put(`/order/${id}/delivery-issue`, null, { params: { issue } }) }

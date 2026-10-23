@@ -37,6 +37,46 @@ public class OrderController {
     @Autowired  // 自动注入OrderService
     private OrderService orderService;
 
+    @PutMapping("/{id}/remind")
+    public Result remind(@PathVariable Long id,HttpSession session) {
+        Long user=SessionUtil.getUserId(session);
+        if(user==null) return Result.error("未登录");
+        return orderService.remindBuyer(user,id);
+    }
+    @PutMapping("/{id}/delivery-issue")
+    public Result issue(@PathVariable Long id,@RequestParam String issue,HttpSession session) {
+        Long user=SessionUtil.getUserId(session);
+        if(user==null) return Result.error("未登录");
+        return orderService.reportDeliveryIssue(user,id,issue);
+    }
+
+    @PutMapping("/{id}/accept")
+    @Operation(summary = "卖家接单", description = "待接单进入待面交，通知买家协商面交时间")
+    public Result accept(@PathVariable Long id, HttpSession session) {
+        Long sellerId = SessionUtil.getUserId(session);
+        if (sellerId == null) return Result.error("未登录");
+        return orderService.acceptOrder(sellerId, id);
+    }
+
+    @GetMapping("/with-user/{peerId}")
+    @Operation(summary = "与聊天对象的订单", description = "仅查询本人和对方的交易，进行中优先，尊重本人隐藏标记")
+    public Result withUser(@PathVariable Long peerId,
+                           @RequestParam(defaultValue = "1") Integer page,
+                           @RequestParam(defaultValue = "10") Integer size,
+                           HttpSession session) {
+        Long userId = SessionUtil.getUserId(session);
+        if (userId == null) return Result.error("未登录");
+        return orderService.getOrdersWithUser(userId, peerId, page, size);
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "查看关联订单", description = "仅订单买卖双方可查看")
+    public Result detail(@PathVariable Long id, HttpSession session) {
+        Long userId = SessionUtil.getUserId(session);
+        if (userId == null) return Result.error("未登录");
+        return orderService.getOrderDetail(userId, id);
+    }
+
     /**
      * 创建订单
      */
@@ -46,7 +86,7 @@ public class OrderController {
                          @RequestParam Long productId,  // 商品ID
                          @Parameter(description = "购买数量，必须大于0且不能超过库存", example = "1", required = true)
                          @RequestParam Integer quantity,  // 购买数量
-                         @Parameter(description = "面交地点", example = "东区食堂门口", required = true)
+                         @Parameter(description = "买家确认的商品面交地点，用于核对是否变更", example = "东区食堂门口", required = true)
                          @RequestParam String address,  // 面交地点
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
         // 从session获取用户ID
@@ -181,7 +221,7 @@ public class OrderController {
      * 查询待处理订单数量（待交付+待确认）
      */
     @GetMapping("/pending-count")  // GET请求，路径 /order/pending-count
-    @Operation(summary = "查询待处理订单数", description = "需要登录，返回待交付和待确认订单的合计数量")
+    @Operation(summary = "查询待处理订单数", description = "需要登录，返回待接单、待面交和待确认订单数量")
     public Result pendingCount(@Parameter(hidden = true) HttpSession session) {
         // 获取当前用户ID
         Long userId = SessionUtil.getUserId(session);
@@ -197,7 +237,7 @@ public class OrderController {
      * 买家取消订单（仅待交付状态可取消）
      */
     @PutMapping("/{id}/cancel")  // PUT请求，路径 /order/{id}/cancel
-    @Operation(summary = "取消订单", description = "需要登录，买家可取消待交付订单，并回补商品库存")
+    @Operation(summary = "取消订单", description = "需要登录，买家可取消待接单或待面交订单，并回补商品库存")
     public Result cancel(@Parameter(description = "订单ID", example = "1", required = true)
                          @PathVariable Long id,  // 订单ID
                          @Parameter(hidden = true) HttpSession session) {

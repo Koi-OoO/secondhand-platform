@@ -68,14 +68,14 @@
           </el-col>
         </el-row>
 
-        <el-form-item label="面交地点">
+        <el-form-item label="面交地点" prop="tradeLocation">
           <el-input
             v-model="form.tradeLocation"
             maxlength="200"
             show-word-limit
             placeholder="例如：东区食堂门口、图书馆一楼、教学楼A座大厅"
           />
-          <div class="form-tip">选填。建议设置方便校内碰面的地点。</div>
+          <div class="form-tip">请填写方便校内碰面的地点，下单时买家将确认此地点。</div>
         </el-form-item>
 
         <el-form-item label="商品描述">
@@ -140,6 +140,7 @@ const form = reactive({
 })
 
 const rules = {
+  tradeLocation: [{ required: true, whitespace: true, message: '请输入面交地点', trigger: 'blur' }],
   imageUrls: [{ type: 'array', min: 1, message: '请至少上传一张图片', trigger: 'change' }],
   title: [
     { required: true, message: '请输入商品标题', trigger: 'blur' },
@@ -254,7 +255,7 @@ async function handleSubmit() {
     stock: form.stock,
     originalPrice: form.originalPrice || null,
     description: form.description || null,
-    tradeLocation: form.tradeLocation || null,
+    tradeLocation: form.tradeLocation.trim(),
     imageUrls: form.imageUrls
   }
 

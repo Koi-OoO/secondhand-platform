@@ -14,6 +14,38 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class MeetupOrderControllerTest {
+    @Test void chatOrdersCannotOverrideSessionViewerWithRequestParameter() throws Exception {
+        OrderService service = mock(OrderService.class);
+        when(service.getOrdersWithUser(20L, 30L, 2, 10)).thenReturn(Result.success(java.util.Collections.emptyList()));
+        OrderController controller = new OrderController();
+        ReflectionTestUtils.setField(controller, "orderService", service);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/order/with-user/30"))
+                .andExpect(jsonPath("$.code").value(500));
+        verifyNoInteractions(service);
+        MockHttpSession session = new MockHttpSession();
+        User buyer = new User(); buyer.setId(20L); SessionUtil.login(session, buyer);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/order/with-user/30")
+                .session(session).param("page", "2").param("userId", "99"))
+                .andExpect(jsonPath("$.code").value(200));
+        verify(service).getOrdersWithUser(20L, 30L, 2, 10);
+    }
+
+    @Test void acceptRouteUsesSessionAndRejectsAnonymousCalls() throws Exception {
+        OrderService service = mock(OrderService.class);
+        when(service.acceptOrder(30L, 10L)).thenReturn(Result.success("接单成功"));
+        OrderController controller = new OrderController();
+        ReflectionTestUtils.setField(controller, "orderService", service);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(put("/order/10/accept")).andExpect(jsonPath("$.code").value(500));
+        verifyNoInteractions(service);
+        MockHttpSession session = new MockHttpSession();
+        User seller = new User(); seller.setId(30L); SessionUtil.login(session, seller);
+        mvc.perform(put("/order/10/accept").session(session).param("sellerId", "99"))
+                .andExpect(jsonPath("$.code").value(200));
+        verify(service).acceptOrder(30L, 10L);
+    }
+
     @Test void meetupRoutesAcceptDeliveryWithoutExpressNumberAndUseSessionSeller() throws Exception {
         OrderService service = mock(OrderService.class);
         when(service.shipOrder(30L, 10L, null)).thenReturn(Result.success("交付成功"));

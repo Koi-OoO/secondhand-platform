@@ -40,6 +40,8 @@ public class EvaluationServiceImpl implements EvaluationService {
     private ProductImageMapper productImageMapper;
     @Autowired  // 注入用户Mapper
     private UserMapper userMapper;
+    @Autowired
+    private com.secondhand.service.NotificationService notificationService;
 
     /**
      * 提交订单评价
@@ -52,6 +54,9 @@ public class EvaluationServiceImpl implements EvaluationService {
             return Result.error("评分需在 1 到 5 之间");
         }
 
+        if (content != null && content.length() > 500) {
+            return Result.error("评价内容不能超过500字");
+        }
         // 查询订单
         Order order = orderMapper.selectById(orderId);
         // 订单不存在
@@ -86,6 +91,8 @@ public class EvaluationServiceImpl implements EvaluationService {
         ev.setCreateTime(new Date());  // 创建时间
         evaluationMapper.insert(ev);  // 插入数据库
 
+        notificationService.notifyUser(order.getSellerId(), "order", "收到新评价",
+                "买家已评价订单，请查看评价详情", orderId);
         return Result.success("评价成功");
     }
 

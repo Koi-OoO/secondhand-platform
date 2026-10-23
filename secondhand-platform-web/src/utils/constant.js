@@ -32,14 +32,17 @@ export const PRODUCT_STATUS_COLOR = {
 
 /** 订单状态 */
 export const ORDER_STATUS = {
-  1: '待交付',
-  2: '待确认',
+  1: '待面交',
+  2: '待买家确认',
   3: '已完成',
-  4: '已取消'
+  4: '已取消',
+  5: '待卖家接单',
+  6: '交易待协商'
 }
 
 /** 订单状态颜色 */
 export const ORDER_STATUS_COLOR = {
+  5: 'warning',
   1: 'primary',
   2: 'primary',
   3: 'success',

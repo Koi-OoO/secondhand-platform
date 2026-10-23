@@ -8,6 +8,9 @@ import java.util.List;
  * 读写均走 REST，WebSocket 仅用于把新消息实时推给在线的接收方。
  */
 public interface MessageService {
+    /** 仅业务服务调用，普通私信接口不可写入预约引用。 */
+    void sendMeetupProposal(com.secondhand.entity.MeetupProposal proposal, Long productId);
+
 
     /**
      * 发送私信：落库后实时推送给接收方（在线才推）。

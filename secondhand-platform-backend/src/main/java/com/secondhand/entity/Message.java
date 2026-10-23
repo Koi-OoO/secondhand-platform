@@ -32,6 +32,10 @@ public class Message {
     @Schema(description = "消息内容")
     private String content;
 
+    private Long meetupProposalId;
+    @TableField(exist = false)
+    private MeetupProposal meetupProposal;
+
     @Schema(description = "接收方是否已读", accessMode = Schema.AccessMode.READ_ONLY)
     private Boolean isRead;  // Boolean包装类型，映射is_read列（下划线转驼峰）
 

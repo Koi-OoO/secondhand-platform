@@ -37,9 +37,16 @@ class EvaluationServiceImplTest {
         ReflectionTestUtils.setField(service, "evaluationMapper", evaluations);
         ReflectionTestUtils.setField(service, "orderMapper", orders);
         ReflectionTestUtils.setField(service, "userMapper", users);
+        com.secondhand.service.NotificationService notifications = mock(com.secondhand.service.NotificationService.class);
+        ReflectionTestUtils.setField(service, "notificationService", notifications);
         assertThat(service.evaluate(20L, 10L, 5, "物品符合描述", false).getCode()).isEqualTo(200);
         org.mockito.Mockito.verify(evaluations).insert(any(Evaluation.class));
         org.mockito.Mockito.verifyNoInteractions(users);
+        org.mockito.Mockito.verify(notifications).notifyUser(30L, "order", "收到新评价",
+                "买家已评价订单，请查看评价详情", 10L);
+        when(evaluations.selectCount(any())).thenReturn(1L);
+        assertThat(service.evaluate(20L, 10L, 5, "重复", false).getCode()).isEqualTo(500);
+        org.mockito.Mockito.verifyNoMoreInteractions(notifications);
     }
 
     @Test

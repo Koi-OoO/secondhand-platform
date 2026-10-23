@@ -68,6 +68,17 @@ class ProductServiceImplTest {
     }
 
     @Test
+    void publishingRequiresMeetupLocation() {
+        Product product = validProduct();
+        product.setTradeLocation(" ");
+        product.setStock(1);
+        when(categoryMapper.selectById(3)).thenReturn(validCategory());
+        Result result = service.publish(7L, product, List.of("/uploads/test.jpg"));
+        assertThat(result.getCode()).isEqualTo(500);
+        assertThat(result.getMessage()).contains("面交地点");
+    }
+
+    @Test
     void publishRequiresStockFieldForInventoryContract() {
         Field stockField = requireField(Product.class, "stock");
 
@@ -364,6 +375,7 @@ class ProductServiceImplTest {
     private Product validProduct() {
         Product product = new Product();
         product.setTitle("Nintendo Switch");
+        product.setTradeLocation("学校东门");
         product.setDescription("Lightly used console");
         product.setPrice(new BigDecimal("1499.00"));
         product.setOriginalPrice(new BigDecimal("1999.00"));

@@ -1,6 +1,11 @@
 <template>
   <main class="messages-page">
-    <section class="messages-shell">
+    <div class="message-tabs" role="group" aria-label="消息类型">
+      <el-button :type="notificationTab ? 'default' : 'primary'" @click="router.push({ name: 'Messages' })">私聊 <span v-if="messageStore.unreadCount">（{{ messageStore.unreadCount }}）</span></el-button>
+      <el-button :type="notificationTab ? 'primary' : 'default'" @click="router.push({ name: 'Messages', query: { tab: 'notifications' } })">系统通知 <span v-if="messageStore.notificationUnreadCount">（{{ messageStore.notificationUnreadCount }}）</span></el-button>
+    </div>
+    <NotificationInbox v-if="notificationTab" />
+    <section v-else class="messages-shell">
       <aside class="conversation-pane">
         <div class="pane-header">
           <div>
@@ -70,6 +75,7 @@
                 </p>
               </div>
             </div>
+            <el-button class="peer-orders-trigger" @click="peerOrdersVisible = true">与 TA 的订单</el-button>
             <el-tag :type="messageStore.connected ? 'success' : 'info'" effect="light" round>
               {{ messageStore.connected ? '在线推送' : '普通模式' }}
             </el-tag>
@@ -93,7 +99,8 @@
                 class="message-row"
                 :class="{ 'message-row--mine': isMine(message) }"
               >
-                <div class="message-bubble">
+                <MeetupProposalCard v-if="message.meetupProposalId" :proposal-id="message.meetupProposalId" :initial="message.meetupProposal" />
+                <div v-else class="message-bubble">
                   <p>{{ message.content }}</p>
                   <time>{{ formatDate(message.createTime) }}</time>
                 </div>
@@ -126,10 +133,14 @@
         </div>
       </section>
     </section>
+    <ChatOrdersDrawer v-model="peerOrdersVisible" :peer-id="selectedPeerId" :peer-name="selectedPeerName" :current-user-id="currentUserId" />
   </main>
 </template>
 
 <script setup>
+import NotificationInbox from './NotificationInbox.vue'
+import ChatOrdersDrawer from './ChatOrdersDrawer.vue'
+import MeetupProposalCard from './MeetupProposalCard.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChatDotRound, Promotion, Refresh } from '@element-plus/icons-vue'
@@ -154,6 +165,8 @@ const router = useRouter()
 const userStore = useUserStore()
 const messageStore = useMessageStore()
 
+const notificationTab = computed(() => route.query.tab === 'notifications')
+const peerOrdersVisible = ref(false)
 const selectedPeerId = ref(null)
 const selectedProductId = ref(null)
 const pendingConversations = ref([])
@@ -189,11 +202,13 @@ const selectedPeerPresenceLabel = computed(() => presenceLabel(selectedPeerId.va
 
 onMounted(async () => {
   await refreshAll()
-  if (!route.query.peerId && messageStore.conversations.length) {
+  if (!notificationTab.value && !route.query.peerId && messageStore.conversations.length) {
     selectPeer(messageStore.conversations[0].peerId, true)
   }
   onlineTimer = window.setInterval(refreshVisibleOnlineStatus, 30_000)
 })
+
+watch([selectedPeerId, notificationTab], () => { peerOrdersVisible.value = false })
 
 onUnmounted(() => {
   if (onlineTimer) {
@@ -216,7 +231,7 @@ watch(
     const peerId = getPeerIdFromMessage(message, currentUserId.value)
     if (peerId && peerId === selectedPeerId.value) {
       messages.value = upsertMessage(messages.value, message)
-      await markActiveConversationRead()
+      if (!notificationTab.value) await markActiveConversationRead()
       scrollToBottom()
     }
   }
@@ -415,6 +430,8 @@ async function scrollToBottom() {
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
+
+.message-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
 
 .messages-page {
   padding: 20px 0 $space-2xl;
@@ -793,7 +810,9 @@ async function scrollToBottom() {
 }
 
 @media (max-width: 640px) {
-  .messages-page {
+  .message-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+
+.messages-page {
     padding-top: 12px;
   }
 

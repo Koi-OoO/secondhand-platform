@@ -32,6 +32,8 @@ public class MessageServiceImpl implements MessageService {
 
     @Autowired  // 注入私信Mapper
     private MessageMapper messageMapper;
+    @Autowired private com.secondhand.mapper.MeetupProposalMapper meetupProposalMapper;
+    @Autowired private com.secondhand.mapper.OrderMapper orderMapper;
     @Autowired  // 注入会话Mapper
     private ConversationMapper conversationMapper;
     @Autowired  // 注入用户Mapper（查对方昵称/头像、校验接收者存在）
@@ -43,7 +45,20 @@ public class MessageServiceImpl implements MessageService {
      * 发送私信
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public Result send(Long fromUserId, Long toUserId, String content, Long productId) {
+        return sendInternal(fromUserId, toUserId, content, productId, null);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void sendMeetupProposal(com.secondhand.entity.MeetupProposal proposal, Long productId) {
+        Result result = sendInternal(proposal.getSellerId(), proposal.getBuyerId(), "面交时间确认 · " + proposal.getOrderNo(), productId, proposal);
+        if (result.getCode() != 200) throw new IllegalStateException("预约卡片发送失败");
+    }
+
+    private Result sendInternal(Long fromUserId, Long toUserId, String content, Long productId,
+                                com.secondhand.entity.MeetupProposal proposal) {
         // 校验接收者
         if (toUserId == null) {
             return Result.error("请选择接收者");
@@ -67,6 +82,9 @@ public class MessageServiceImpl implements MessageService {
         msg.setFromUserId(fromUserId);  // 发送者
         msg.setToUserId(toUserId);  // 接收者
         msg.setProductId(productId);  // 关联商品（可空）
+        if (proposal != null) {
+            msg.setMeetupProposalId(proposal.getId()); msg.setMeetupProposal(proposal);
+        }
         msg.setContent(content.trim());  // 内容
         msg.setIsRead(false);  // 默认未读
         msg.setCreateTime(new Date());  // 创建时间
@@ -77,7 +95,19 @@ public class MessageServiceImpl implements MessageService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "chat");  // 前端按type分发
         payload.put("data", msg);  // 消息本体
-        chatWebSocketHandler.sendToUser(toUserId, JSONUtil.toJsonStr(payload));
+        String json = JSONUtil.toJsonStr(payload);
+        Runnable push = () -> {
+            try {
+                chatWebSocketHandler.sendToUser(toUserId, json);
+                if (proposal != null) chatWebSocketHandler.sendToUser(fromUserId, json);
+            } catch (Exception ignored) { /* 消息已保存，离线或推送失败可重新读取。 */ }
+        };
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override public void afterCommit() { push.run(); }
+                });
+        } else push.run();
 
         return Result.success(msg);
     }
@@ -163,6 +193,25 @@ public class MessageServiceImpl implements MessageService {
                 .orderByDesc(Message::getId);
         Page<Message> pageObj = new Page<>(page, size);
         IPage<Message> result = messageMapper.selectPage(pageObj, wrapper);
+
+        // 批量附带可信卡片数据，避免每条消息单独查询。
+        List<Long> proposalIds = result.getRecords().stream().map(Message::getMeetupProposalId)
+                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        if (!proposalIds.isEmpty()) {
+            Map<Long, com.secondhand.entity.MeetupProposal> proposalMap = meetupProposalMapper.selectBatchIds(proposalIds).stream()
+                    .collect(Collectors.toMap(com.secondhand.entity.MeetupProposal::getId, p -> p));
+            List<Long> orderIds = proposalMap.values().stream().map(com.secondhand.entity.MeetupProposal::getOrderId).distinct().collect(Collectors.toList());
+            Map<Long, com.secondhand.entity.Order> orderMap = orderIds.isEmpty() ? Collections.emptyMap() : orderMapper.selectBatchIds(orderIds).stream()
+                    .collect(Collectors.toMap(com.secondhand.entity.Order::getId, o -> o));
+            for (Message msg : result.getRecords()) {
+                com.secondhand.entity.MeetupProposal p = proposalMap.get(msg.getMeetupProposalId());
+                if (p == null) continue;
+                com.secondhand.entity.Order order = orderMap.get(p.getOrderId());
+                p.setOrderStatus(order == null ? null : order.getStatus());
+                p.setCurrentMeetupTime(order == null ? null : order.getMeetupTime());
+                msg.setMeetupProposal(p);
+            }
+        }
 
         // 3. 组装分页结果
         Map<String, Object> data = new LinkedHashMap<>();

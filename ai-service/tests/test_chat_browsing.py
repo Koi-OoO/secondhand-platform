@@ -1,5 +1,7 @@
 """验证真实商品封面与工具筛选条件的完整响应链路，不调用模型或数据库。"""
 
+# 阅读顺序：先测 Java JSON 转卡片，再测工具保存筛选条件，最后测运行流程和 HTTP 响应。
+
 import json
 
 import pytest
@@ -22,6 +24,7 @@ def raw_product(**extra):
 
 
 def test_client_selects_first_valid_cover_by_sort():
+    # 构造含空值和乱序图片的响应，封面应取有效图片中 sort 最小的一张。
     card = JavaMarketplaceClient._card(raw_product(images=[
         None, {"url": "", "sort": 0},
         {"url": "/uploads/gallery.jpg", "sort": 2},
@@ -67,6 +70,7 @@ def tools_for(client, context):
 
 @pytest.mark.asyncio
 async def test_search_exposes_actual_filters_without_tool_pagination():
+    # 工具分页只用于当前这次查询；“更多类似商品”继承筛选条件，不继承第 2 页等位置。
     client, context = RecordingClient(), ExecutionContext()
     tools = tools_for(client, context)
     await tools[0].ainvoke({"keyword": "台灯", "category_id": 3, "min_price": 0,
@@ -82,6 +86,7 @@ async def test_search_exposes_actual_filters_without_tool_pagination():
 
 @pytest.mark.asyncio
 async def test_empty_search_preserves_criteria_and_failure_clears_them():
+    # 空结果仍是成功查询，可以继续浏览；查询失败则不能沿用前一次工具查询的筛选条件。
     client, context = RecordingClient(empty=True), ExecutionContext()
     tools = tools_for(client, context)
     await tools[0].ainvoke({"keyword": "台灯", "max_price": 100})
@@ -95,6 +100,7 @@ async def test_empty_search_preserves_criteria_and_failure_clears_them():
 
 @pytest.mark.asyncio
 async def test_invalid_tool_filter_is_rejected_before_client_call():
+    # 最高价小于最低价时直接返回工具错误，记录客户端应没有收到任何请求。
     client, context = RecordingClient(), ExecutionContext()
     result = json.loads(await tools_for(client, context)[0].ainvoke({"min_price": 200, "max_price": 100}))
     assert isinstance(result, dict) and "error" in result
@@ -104,6 +110,7 @@ async def test_invalid_tool_filter_is_rejected_before_client_call():
 
 @pytest.mark.asyncio
 async def test_keyword_is_canonical_before_http_and_metadata():
+    # 发往 Java 的关键词和返回给前端的筛选条件应使用同一个去空格后的值。
     client, context = RecordingClient(), ExecutionContext()
     await tools_for(client, context)[0].ainvoke({"keyword": "  台灯  "})
     assert client.calls[0]["keyword"] == "台灯"
@@ -112,6 +119,7 @@ async def test_keyword_is_canonical_before_http_and_metadata():
 
 @pytest.mark.asyncio
 async def test_oversized_keyword_cannot_be_silently_truncated_in_more_link():
+    # 超长关键词明确拒绝，不偷偷截断成另一组查询条件。
     client, context = RecordingClient(), ExecutionContext()
     result = json.loads(await tools_for(client, context)[0].ainvoke({"keyword": "教材" * 101}))
     assert isinstance(result, dict) and "error" in result
@@ -125,6 +133,7 @@ class SearchAgent:
         self.tools = tools
 
     async def ainvoke(self, payload):
+        # 不调用真实模型，但仍执行真正的工具，用于验证查询数据如何流经整个流程。
         await self.tools[0].ainvoke({"keyword": "台灯", "max_price": 100})
         return {"messages": [{"role": "assistant", "content": "商品筛选以实际工具参数为准。"}]}
 
@@ -137,6 +146,7 @@ def request():
 
 @pytest.mark.asyncio
 async def test_runtime_returns_cover_and_search_filters():
+    # 同时检查封面、筛选条件和对外 JSON 字段名，确保前端能拿到完整数据。
     result = await run_agent(request(), client=RecordingClient(), agent_factory=lambda tools: SearchAgent(tools))
     dumped = result.model_dump(by_alias=True, exclude_none=True)
     assert dumped.get("searchFilters") == {"keyword": "台灯", "maxPrice": 100, "sort": "latest"}
@@ -145,6 +155,7 @@ async def test_runtime_returns_cover_and_search_filters():
 
 @pytest.mark.asyncio
 async def test_detail_after_search_keeps_this_search_browsing_criteria():
+    # 同一轮先搜索再查看详情，不应丢失刚才搜索的“更多类似商品”条件。
     context = ExecutionContext()
     tools = tools_for(RecordingClient(), context)
     await tools[0].ainvoke({"keyword": "台灯", "max_price": 100})
@@ -154,6 +165,7 @@ async def test_detail_after_search_keeps_this_search_browsing_criteria():
 
 
 def test_http_route_keeps_cover_and_filter_aliases(monkeypatch):
+    # 替换路由调用的运行函数，但保留实际工具流程；检查 HTTP 返回中的驼峰字段名。
     assert hasattr(schemas, "SearchFilters"), "缺少筛选条件响应模型"
 
     async def fake_run_agent(payload):

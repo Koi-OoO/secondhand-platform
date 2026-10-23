@@ -72,6 +72,91 @@ public class OrderServiceImpl implements OrderService {
     // 锁的持有时间（秒）
     private static final long LOCK_LEASE_SECONDS = 10;
 
+    @Override
+    @Transactional
+    public Result remindBuyer(Long sellerId, Long orderId) {
+        Order order=orderMapper.selectById(orderId);
+        if(order==null || !order.getSellerId().equals(sellerId)) return Result.error("订单不存在或无权提醒");
+        if(!Integer.valueOf(2).equals(order.getStatus())) return Result.error("仅待买家确认的订单可以提醒；有问题时请先协商");
+        Date now=new Date(); Date cutoff=new Date(now.getTime()-TimeUnit.HOURS.toMillis(24));
+        if(order.getLastRemindTime()!=null && order.getLastRemindTime().after(cutoff)) return Result.error("24小时内已经提醒过，请勿重复催促");
+        int changed=orderMapper.update(null,new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<Order>()
+                .eq("id",orderId).eq("seller_id",sellerId).eq("status",2)
+                .and(q->q.isNull("last_remind_time").or().le("last_remind_time",cutoff)).set("last_remind_time",now));
+        if(changed!=1) return Result.error("订单状态已变化或已提醒，请刷新");
+        order.setLastRemindTime(now);
+        notificationService.notifyUser(order.getBuyerId(),"order","卖家提醒确认收货",
+                "请核实订单（"+order.getOrderNo()+"）是否已收到商品；未收到或有问题请在订单中反馈，请勿提前确认完成",orderId);
+        return Result.success("提醒已发送，每24小时可提醒一次");
+    }
+
+    @Override
+    @Transactional
+    public Result reportDeliveryIssue(Long buyerId,Long orderId,String issue) {
+        if(issue==null || issue.trim().isEmpty() || issue.trim().length()>500) return Result.error("请填写1至500字的问题说明");
+        Order order=orderMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Order>().eq("id",orderId).last("FOR UPDATE"));
+        if(order==null || !order.getBuyerId().equals(buyerId)) return Result.error("订单不存在或无权反馈");
+        if(!Integer.valueOf(2).equals(order.getStatus())) return Result.error("仅待确认交付的订单可反馈；其他情况请联系对方");
+        order.setDeliveryIssue(issue.trim());order.setDeliveryIssueTime(new Date());order.setStatus(6);
+        orderMapper.updateById(order);
+        notificationService.notifyUser(order.getSellerId(),"order","买家反馈交易问题",
+                "订单（"+order.getOrderNo()+"）买家反馈："+issue.trim()+"。已暂停确认提醒，请通过站内聊天协商",orderId);
+        return Result.success("已记录问题并通知卖家，请联系对方协商");
+    }
+
+    private Order lockOrderForTransition(Long orderId) {
+        return orderMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Order>()
+                .eq("id", orderId).last("FOR UPDATE"));
+    }
+
+    @Override
+    @Transactional
+    public Result acceptOrder(Long sellerId, Long orderId) {
+        Order order = lockOrderForTransition(orderId);
+        if (order == null || !order.getSellerId().equals(sellerId)) return Result.error("订单不存在或无权接单");
+        if (!Integer.valueOf(5).equals(order.getStatus())) return Result.error("仅待接单订单可接单");
+        Date now = new Date();
+        // 仅更新仍处于待接单的本人订单，重复接单不重复通知。
+        int changed = orderMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<Order>()
+                .eq("id", orderId).eq("seller_id", sellerId).eq("status", 5)
+                .set("status", 1).set("accept_time", now));
+        if (changed != 1) return Result.error("订单状态已变化，请刷新后重试");
+        order.setStatus(1);
+        order.setAcceptTime(now);
+        notificationService.notifyUser(order.getBuyerId(), "order", "卖家已接单",
+                "卖家已接单，请通过站内聊天协商面交时间", orderId);
+        return Result.success("接单成功，请联系买家协商面交时间");
+    }
+
+    @Override
+    public Result getOrdersWithUser(Long userId, Long peerId, Integer page, Integer size) {
+        if (userId == null || userId <= 0) return Result.error("未登录");
+        if (peerId == null || peerId <= 0 || peerId.equals(userId)) return Result.error("请选择有效的聊天对象");
+        int current = page == null || page < 1 ? 1 : page;
+        int limit = size == null || size < 1 ? 10 : Math.min(size, 50);
+        // 两个方向都必须绑定本人及对方；仅应用本人视角的隐藏标记。
+        com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Order> query =
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
+        query.and(pair -> pair.nested(buy -> buy.eq("buyer_id", userId).eq("seller_id", peerId).eq("buyer_deleted", 0))
+                .or().nested(sell -> sell.eq("seller_id", userId).eq("buyer_id", peerId).eq("seller_deleted", 0)))
+                .orderByAsc("CASE WHEN status IN (1,2,5,6) THEN 0 ELSE 1 END")
+                .orderByDesc("create_time", "id");
+        return queryOrders(current, limit, query);
+    }
+
+    @Override
+    public Result getOrderDetail(Long userId, Long orderId) {
+        Order order = lockOrderForTransition(orderId);
+        if (order == null || userId == null ||
+                (!userId.equals(order.getBuyerId()) && !userId.equals(order.getSellerId()))) {
+            return Result.error("订单不存在或无权查看");
+        }
+        enrichOrders(java.util.Collections.singletonList(order));
+        order.setEvaluation(evaluationMapper.selectOne(new LambdaQueryWrapper<Evaluation>()
+                .eq(Evaluation::getOrderId, orderId).eq(Evaluation::getFromUserId, order.getBuyerId())));
+        return Result.success(order);
+    }
+
     /**
      * 创建订单
      */
@@ -137,11 +222,21 @@ public class OrderServiceImpl implements OrderService {
             return Result.error("库存不足");
         }
 
+        // 以商品地点为准；客户端传入的地址仅用于核对买家确认的版本。
+        String location = product.getTradeLocation();
+        if (location == null || location.trim().isEmpty()) {
+            return Result.error("卖家尚未设置面交地点，请联系卖家补充后再下单");
+        }
+        location = location.trim();
+        if (!location.equals(address.trim())) {
+            return Result.error("商品面交地点已变更，请刷新页面后重新确认");
+        }
+
         // 检查是否有未完成的订单（同商品同买家）
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Order::getBuyerId, buyerId)
                 .eq(Order::getProductId, productId)
-                .lt(Order::getStatus, 3);  // 状态小于3表示未完成
+                .in(Order::getStatus, 1, 2, 5, 6);  // 明确列出未完成状态，包含待接单
         if (orderMapper.selectCount(wrapper) > 0) {
             return Result.error("您已有该商品的未完成订单");
         }
@@ -158,12 +253,16 @@ public class OrderServiceImpl implements OrderService {
         order.setBuyerId(buyerId);  // 买家ID
         order.setSellerId(product.getSellerId());  // 卖家ID
         order.setProductId(productId);  // 商品ID
+        order.setSnapshotTitle(product.getTitle());
+        order.setUnitPrice(product.getPrice());
+        List<ProductImage> images = productImageMapper.selectByProductIds(java.util.Collections.singletonList(productId));
+        order.setSnapshotImage(images.isEmpty() ? null : images.get(0).getUrl());
         order.setQuantity(quantity);  // 购买数量
         order.setProductAmount(productAmount);  // 商品金额
         order.setFreight(BigDecimal.ZERO);  // 运费（默认0）
         order.setTotalAmount(productAmount);  // 总金额
-        order.setAddress(address.trim());  // 面交地点
-        order.setStatus(1);  // 下单即进入待交付状态
+        order.setAddress(location);  // 下单时的地点快照，商品修改不影响已有订单
+        order.setStatus(5);  // 新订单先等待卖家接单
         order.setCreateTime(new Date());  // 创建时间
         orderMapper.insert(order);  // 保存订单
 
@@ -180,9 +279,9 @@ public class OrderServiceImpl implements OrderService {
         log.info("订单创建成功：订单号={} 买家ID={} 商品ID={} 数量={}",
                 orderNo, buyerId, productId, quantity);
 
-        // 通知卖家：有新订单待交付
+        // 通知卖家：有新订单待接单
         notificationService.notifyUser(product.getSellerId(), "order", "新订单",
-                "您有一笔新订单「" + product.getTitle() + "」，请尽快交付", order.getId());
+                "您有一笔新订单「" + product.getTitle() + "」，请及时接单并协商面交时间", order.getId());
         return Result.success("下单成功");
     }
 
@@ -305,7 +404,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public Result cancelOrder(Long userId, Long orderId) {
         // 查询订单
-        Order order = orderMapper.selectById(orderId);
+        Order order = lockOrderForTransition(orderId);
         // 订单不存在
         if (order == null) {
             return Result.error("订单不存在");
@@ -314,13 +413,14 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getBuyerId().equals(userId)) {
             return Result.error("无权操作");
         }
-        // 订单状态不是待交付（1）
-        if (order.getStatus() != 1) {
-            return Result.error("仅待交付状态可取消");
+        // 实际交付前，买家可以取消。
+        if (order.getStatus() != 1 && order.getStatus() != 5) {
+            return Result.error("仅待接单或待面交订单可取消");
         }
 
         // 更新订单状态为已取消
         order.setStatus(4);
+        order.setCancelTime(new Date());
         order.setCancelType(1);  // 取消类型：1-买家取消
         order.setCancelReason("买家取消订单");
         orderMapper.updateById(order);
@@ -383,7 +483,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public Result confirmOrder(Long buyerId, Long orderId) {
         // 查询订单
-        Order order = orderMapper.selectById(orderId);
+        Order order = lockOrderForTransition(orderId);
         // 订单不存在
         if (order == null) {
             return Result.error("订单不存在");
@@ -393,7 +493,7 @@ public class OrderServiceImpl implements OrderService {
             return Result.error("无权操作");
         }
         // 订单状态不是待确认（2）
-        if (order.getStatus() != 2) {
+        if (order.getStatus() != 2 && order.getStatus() != 6) {
             return Result.error("仅待确认状态可确认");
         }
 
@@ -449,7 +549,10 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public Result getPendingCount(Long userId) {
-        // 统计待交付数量（卖家视角，状态=1）
+        LambdaQueryWrapper<Order> acceptanceWrapper = new LambdaQueryWrapper<>();
+        acceptanceWrapper.eq(Order::getSellerId, userId).eq(Order::getStatus, 5);
+        long toAccept = orderMapper.selectCount(acceptanceWrapper);
+        // 统计待面交数量（卖家视角，状态=1）
         LambdaQueryWrapper<Order> sellerWrapper = new LambdaQueryWrapper<>();
         sellerWrapper.eq(Order::getSellerId, userId).eq(Order::getStatus, 1);
         long toShip = orderMapper.selectCount(sellerWrapper);
@@ -461,6 +564,7 @@ public class OrderServiceImpl implements OrderService {
 
         // 组装返回数据
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("toAccept", toAccept);
         data.put("toShip", toShip);  // 待交付数量
         data.put("toConfirm", toConfirm);  // 待确认数量
         return Result.success(data);
@@ -469,7 +573,7 @@ public class OrderServiceImpl implements OrderService {
     /**
      * 分页查询订单（共用方法）
      */
-    private Result queryOrders(Integer page, Integer size, LambdaQueryWrapper<Order> wrapper) {
+    private Result queryOrders(Integer page, Integer size, com.baomidou.mybatisplus.core.conditions.Wrapper<Order> wrapper) {
         // 分页查询
         Page<Order> pageObj = new Page<>(page, size);
         IPage<Order> result = orderMapper.selectPage(pageObj, wrapper);
@@ -527,9 +631,13 @@ public class OrderServiceImpl implements OrderService {
         for (Order order : orders) {
             order.setEvaluated(evaluatedIds.contains(order.getId()));
             Product product = productMap.get(order.getProductId());
-            if (product != null) {
-                order.setProductTitle(product.getTitle());  // 商品标题
-                order.setProductImage(firstImageMap.get(product.getId()));  // 商品图片
+            if (order.getSnapshotTitle() != null) {
+                order.setProductTitle(order.getSnapshotTitle());
+                order.setProductImage(order.getSnapshotImage());
+            } else if (product != null) {
+                // 无法还原旧订单的商品快照，页面应明确标注为当前参考信息。
+                order.setProductTitle(product.getTitle());
+                order.setProductImage(firstImageMap.get(product.getId()));
             }
             User buyer = userMap.get(order.getBuyerId());
             if (buyer != null) {
@@ -632,7 +740,7 @@ public class OrderServiceImpl implements OrderService {
             return "订单 ID 无效";
         }
         // 查询订单
-        Order order = orderMapper.selectById(orderId);
+        Order order = lockOrderForTransition(orderId);
         // 订单不存在
         if (order == null) {
             return "订单不存在";
@@ -643,7 +751,10 @@ public class OrderServiceImpl implements OrderService {
         }
         // 订单状态不是待交付
         if (order.getStatus() != 1) {
-            return "仅待交付状态可交付";
+            return "请先接单，仅待面交订单可确认交付";
+        }
+        if (order.getMeetupTime() == null) {
+            return "买家尚未确认面交时间，请先发送预约卡片并等待确认";
         }
         // 更新订单
         // 面交不生成物流凭证，也不能把卖家确认交付解释为已支付。
@@ -654,8 +765,8 @@ public class OrderServiceImpl implements OrderService {
         log.info("卖家已确认面交交付：订单号={}", order.getOrderNo());
 
         // 通知买家：卖家已交付
-        notificationService.notifyUser(order.getBuyerId(), "order", "卖家已确认交付",
-                "订单（" + order.getOrderNo() + "）卖家已确认面交交付，请实际收到商品并核对后确认。付款由双方线下完成。", order.getId());
+        notificationService.notifyUser(order.getBuyerId(), "order", "卖家声明已交付",
+                "订单（" + order.getOrderNo() + "）卖家声明已交付，请核实是否收到；未收到或有问题可在订单中反馈。付款由双方线下完成。", order.getId());
         return null;  // 成功返回null
     }
 
@@ -668,7 +779,7 @@ public class OrderServiceImpl implements OrderService {
             return "订单 ID 无效";
         }
         // 查询订单
-        Order order = orderMapper.selectById(orderId);
+        Order order = lockOrderForTransition(orderId);
         // 订单不存在
         if (order == null) {
             return "订单不存在";
@@ -677,12 +788,13 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getSellerId().equals(sellerId)) {
             return "无权操作";
         }
-        // 订单状态不是待交付
-        if (order.getStatus() != 1) {
-            return "仅待交付状态可拒绝";
+        if (order.getStatus() != 1 && order.getStatus() != 5) {
+            return "仅待接单或待面交订单可拒绝或取消";
         }
+        boolean waitingAcceptance = order.getStatus() == 5;
         // 更新订单为已取消
         order.setStatus(4);
+        order.setCancelTime(new Date());
         order.setCancelType(2);  // 取消类型：2-卖家拒绝
         order.setCancelReason(normalizeRejectReason(reason));  // 拒绝原因
         orderMapper.updateById(order);
@@ -692,7 +804,7 @@ public class OrderServiceImpl implements OrderService {
                 sellerId, order.getOrderNo(), reason != null ? reason : "");
 
         // 通知买家：卖家拒绝交付
-        notificationService.notifyUser(order.getBuyerId(), "order", "卖家拒绝交付",
+        notificationService.notifyUser(order.getBuyerId(), "order", waitingAcceptance ? "卖家拒绝接单" : "卖家取消交易",
                 "您的订单（" + order.getOrderNo() + "）被卖家拒绝交付：" + order.getCancelReason(), order.getId());
         return null;  // 成功返回null
     }

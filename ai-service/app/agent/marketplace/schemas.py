@@ -1,5 +1,7 @@
 """商品工具和 Agent 状态共享的 Pydantic 数据模型。"""
 
+# 类似 Java 的请求/响应 DTO，但 BaseModel 还会在创建对象时校验字段类型和取值范围。
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -8,6 +10,7 @@ class UserContext(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    # 用户身份由 Java 登录入口确定；不要让模型从聊天内容重新指定身份。
     user_id: int = Field(alias="userId")
     campus: str
     role: str
@@ -18,27 +21,31 @@ class ProductCard(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    # 商品字段来自 Java 接口；alias 表示对外 JSON 使用的字段名。
     product_id: int = Field(alias="productId")
     title: str
     price: float
     stock: int
     condition_level: int = Field(alias="conditionLevel")
     trade_location: str = Field(alias="tradeLocation")
-    detail_path: str = Field(alias="detailPath")
+    detail_path: str = Field(alias="detailPath")  # 前端商品详情页的跳转路径
     cover_url: str | None = Field(default=None, alias="coverUrl")  # Java商品图片中的真实封面
 
 
 class ProductDetail(ProductCard):
     """Java 商品详情接口返回的商品详情数据结构。"""
 
+    # 目前详情沿用卡片字段；pass 表示不新增字段，仍继承 ProductCard 的全部定义。
     pass
 
 
 class SearchFilters(BaseModel):
     """成功商品搜索实际使用的条件，供前端继续浏览；不包含工具分页。"""
 
+    # 同时接受 Python/JSON 字段名，并先去除字符串首尾空格。
     model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
 
+    # None 表示用户没有指定该筛选条件；ge 是“大于等于”，le 是“小于等于”。
     keyword: str | None = Field(default=None, max_length=200)
     category_id: int | None = Field(default=None, ge=1, alias="categoryId")
     min_price: float | None = Field(default=None, ge=0, allow_inf_nan=False, alias="minPrice")
@@ -50,11 +57,13 @@ class SearchFilters(BaseModel):
     @classmethod
     def normalize_keyword(cls, value: str | None) -> str | None:
         """在查询前统一去除首尾空格，空关键词视为未指定，供前端原样继续搜索。"""
+        # 首尾空格由上面的配置处理；这里把去空格后的空字符串统一转为 None。
         return value or None
 
     @model_validator(mode="after")
     def validate_price_range(self) -> "SearchFilters":
         """在发起 HTTP 请求前拒绝反向价格区间。"""
+        # 单个字段合法还不够，最高价必须不小于最低价；验证失败会阻止发起查询。
         if self.min_price is not None and self.max_price is not None and self.max_price < self.min_price:
             raise ValueError("max_price must be greater than or equal to min_price")
         return self
@@ -63,5 +72,6 @@ class SearchFilters(BaseModel):
 class SearchListingsParams(SearchFilters):
     """只读商品搜索工具接受的筛选条件及有限分页参数。"""
 
+    # 继承上面的筛选条件，再加分页；单次最多 20 件，避免模型请求过多商品。
     page: int = Field(default=1, ge=1)
     size: int = Field(default=10, ge=1, le=20)
