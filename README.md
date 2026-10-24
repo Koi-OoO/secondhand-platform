@@ -148,13 +148,20 @@ my-project/
 mysql -u root -p < secondhand-platform-backend/src/main/resources/sql/init.sql
 ```
 
+> **仅新建空数据库时运行 `init.sql`**：脚本会删表重建。已有数据库只执行尚未应用的增量迁移，不要重复运行初始化脚本。
+
 ### 2. 配置后端
 
 数据库连接默认在 `secondhand-platform-backend/src/main/resources/application.yml` 中。
 
 密钥等敏感配置放在 **`application-local.yml`**(该文件已被 `.gitignore` 忽略,不会提交)。在 `secondhand-platform-backend/src/main/resources/` 下新建:
 
+主配置通过 `DB_PASSWORD` 环境变量读取数据库密码；也可在本地文件中填写。该文件只保留在自己的电脑上，不要提交真实密码。下列占位符需替换为自己的配置：
+
 ```yaml
+spring:
+  datasource:
+    password: <你的MySQL密码>
 app:
   oss:
     endpoint: oss-cn-xxx.aliyuncs.com

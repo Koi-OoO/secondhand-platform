@@ -63,6 +63,13 @@ springdoc:
 
 # 应用自定义配置
 app:
+  cache:
+    category:
+      # 分类缓存对照测试开关；关闭仅绕过分类缓存，不停用 Redis 或其他缓存。
+      enabled: ${CATEGORY_CACHE_ENABLED:true}
+    product-detail:
+      # 关闭仅绕过商品详情缓存，仍保留浏览量统计、登录会话和交易锁。
+      enabled: ${PRODUCT_DETAIL_CACHE_ENABLED:true}
   ai:
     base-url: ${AI_SERVICE_BASE_URL:http://localhost:8000}
     internal-token: ${AI_INTERNAL_TOKEN:dev-ai-internal-token}

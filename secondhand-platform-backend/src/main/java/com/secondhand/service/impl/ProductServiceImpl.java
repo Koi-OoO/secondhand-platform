@@ -31,6 +31,7 @@ import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
@@ -80,6 +81,10 @@ public class ProductServiceImpl implements ProductService {
 
     @Autowired  // 注入缓存工具类
     private CacheUtil cacheUtil;
+
+    // 仅控制商品详情的缓存读写；关闭后仍保留浏览统计和交易锁。
+    @Value("${app.cache.product-detail.enabled:true}")
+    private boolean productDetailCacheEnabled = true;
 
     // 与商品广场复用全文搜索；ES 关闭时允许传统服务启动，但 AI 查询明确报错。
     @Autowired
@@ -181,12 +186,13 @@ public class ProductServiceImpl implements ProductService {
         if (productId == null || productId <= 0) {
             return Result.error("商品 ID 无效");
         }
-        // 使用逻辑过期缓存方案查询（防缓存击穿）
-        Product product = cacheUtil.queryWithLogicalExpire(
+        // 开启时使用逻辑过期缓存；关闭时复用同一数据库加载器进行对照测试。
+        Product product = productDetailCacheEnabled ? cacheUtil.queryWithLogicalExpire(
                 PRODUCT_CACHE_KEY, productId, Product.class,
                 this::loadProductDetail,  // 缓存未命中时的回源加载器
                 DETAIL_LOGIC_TTL,
-                DETAIL_PHYSIC_TTL + (long) (Math.random() * DETAIL_TTL_JITTER));
+                DETAIL_PHYSIC_TTL + (long) (Math.random() * DETAIL_TTL_JITTER))
+                : loadProductDetail(productId);
         // 商品不存在、已删除，或 AI 查询时商品不是在售状态
         boolean invisible = recordViewCount
                 ? (product != null && product.getStatus() != null && product.getStatus() == 4)
