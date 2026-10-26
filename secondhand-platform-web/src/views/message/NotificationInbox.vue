@@ -1,7 +1,7 @@
 <template>
   <section class="notification-inbox" aria-label="系统通知">
     <header class="inbox-header">
-      <div><h1>系统通知</h1><p>订单进展和评价提醒，离线消息也会保留。</p></div>
+      <div><h1>系统通知</h1><p>订单进展、收藏和评价提醒，离线消息也会保留。</p></div>
       <div class="inbox-actions">
         <el-button :loading="loading" @click="load">刷新</el-button>
         <el-button :disabled="!messageStore.notificationUnreadCount" :loading="markingAll" @click="readAll">全部已读</el-button>
@@ -10,11 +10,17 @@
     <div v-if="error" class="inbox-empty" role="alert">{{ error }} <el-button @click="load">重试</el-button></div>
     <div v-else v-loading="loading" class="notification-list">
       <p v-if="!items.length && !loading" class="inbox-empty">暂无系统通知，交易进展会显示在这里。</p>
-      <button v-for="item in items" :key="item.id" class="notification-item" :class="{ unread: !item.isRead }" @click="open(item)">
+      <article v-for="item in items" :key="item.id" class="notification-item" :class="{ unread: !item.isRead }">
         <span class="notification-dot" :class="{ visible: !item.isRead }"></span>
-        <span class="notification-copy"><strong>{{ item.title }}</strong><span>{{ item.content }}</span><time>{{ formatDate(item.createTime) }}</time></span>
-        <span class="notification-action">{{ item.type === 'order' && item.relatedId ? '查看订单' : '查看通知' }}</span>
-      </button>
+        <div class="notification-copy">
+          <button v-if="notificationActor(item)" class="notification-actor" :aria-label="`查看${notificationActor(item).name}的公开主页`" @click="openActor(item)">
+            <el-avatar :size="32" :src="notificationActor(item).avatar">{{ notificationActor(item).name.charAt(0) }}</el-avatar>
+            <span>{{ notificationActor(item).name }}</span>
+          </button>
+          <button class="notification-content" @click="open(item)"><strong>{{ item.title }}</strong><span>{{ item.content }}</span><time>{{ formatDate(item.createTime) }}</time></button>
+        </div>
+        <button class="notification-action" @click="open(item)">{{ item.type === 'order' && item.relatedId ? '查看订单' : '查看通知' }}</button>
+      </article>
     </div>
     <el-pagination v-if="total > size" v-model:current-page="page" :page-size="size" :total="total" layout="prev, pager, next" @current-change="load" />
     <el-dialog v-model="detailVisible" title="通知详情" width="min(560px, 92vw)">
@@ -32,6 +38,7 @@ import { useRouter } from 'vue-router'
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '@/api/notification'
 import { useMessageStore } from '@/stores/message'
 import { formatDate } from '@/utils/format'
+import { notificationActor } from '@/utils/notification'
 
 const router = useRouter()
 const messageStore = useMessageStore()
@@ -54,8 +61,7 @@ async function load() {
     if (version === loadVersion) loading.value = false
   }
 }
-async function open(item) {
-  selected.value = item
+async function read(item) {
   if (!item.isRead) {
     try {
       await markNotificationRead(item.id)
@@ -63,6 +69,16 @@ async function open(item) {
       await messageStore.refreshUnreadCounts()
     } catch { /* 保持未读，可再次点击重试；请求拦截器显示错误 */ }
   }
+}
+async function openActor(item) {
+  const actor = notificationActor(item)
+  if (!actor) return
+  await read(item)
+  await router.push(actor.route)
+}
+async function open(item) {
+  selected.value = item
+  await read(item)
   if (item.type === 'order' && item.relatedId) {
     await router.push({ name: 'OrderDetail', params: { id: item.relatedId } })
   } else {
@@ -89,9 +105,14 @@ h1 { margin: 0; font-size: 24px; }
 .inbox-header p, time { color: $color-text-secondary; }
 .inbox-actions { display: flex; align-items: center; }
 .notification-list { min-height: 220px; }
-.notification-item { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; border: 0; border-bottom: 1px solid $color-border-light; background: transparent; color: inherit; font: inherit; padding: 20px 8px; cursor: pointer; }
-.notification-item:hover, .notification-item:focus-visible { background: rgba(0,0,0,.035); }
+.notification-item { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; border-bottom: 1px solid $color-border-light; padding: 20px 8px; }
+.notification-item:hover, .notification-item:focus-within { background: rgba(0,0,0,.035); }
 .notification-copy { display: flex; flex-direction: column; gap: 7px; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.notification-content, .notification-actor, .notification-action { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.notification-content { display: flex; flex-direction: column; gap: 7px; width: 100%; overflow-wrap: anywhere; }
+.notification-actor { display: inline-flex; align-items: center; align-self: flex-start; gap: 9px; max-width: 100%; font-weight: 600; }
+.notification-actor span { overflow-wrap: anywhere; }
+.notification-actor:hover > span:last-child { text-decoration: underline; text-underline-offset: 3px; }
 .notification-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: transparent; }
 .notification-dot.visible { background: #c45530; }
 .notification-action { font-size: 13px; color: $color-text-secondary; flex-shrink: 0; }

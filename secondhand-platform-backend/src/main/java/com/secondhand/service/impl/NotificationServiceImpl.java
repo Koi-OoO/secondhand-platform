@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.secondhand.entity.Notification;
 import com.secondhand.mapper.NotificationMapper;
+import com.secondhand.mapper.UserMapper;
+import com.secondhand.entity.User;
 import com.secondhand.service.NotificationService;
 import com.secondhand.util.Result;
 import com.secondhand.websocket.ChatWebSocketHandler;
@@ -31,12 +33,39 @@ public class NotificationServiceImpl implements NotificationService {
     private NotificationMapper notificationMapper;
     @Autowired  // 注入WebSocket处理器，用于实时推送
     private ChatWebSocketHandler chatWebSocketHandler;
+    @Autowired
+    private UserMapper userMapper;
 
     /**
      * 创建通知并实时推送
      */
     @Override
     public void notifyUser(Long userId, String type, String title, String content, Long relatedId) {
+        sendNotification(userId, type, title, content, relatedId, null, null, null);
+    }
+
+    @Override
+    public void notifyFavorite(Long sellerId, Long collectorId, Long productId, String productTitle) {
+        try {
+            User actor = userMapper.selectById(collectorId);
+            if (actor == null) {
+                notifyUser(sellerId, "favorite", "有人收藏了你的商品", "您的商品「" + productTitle + "」被收藏了", productId);
+                return;
+            }
+            String nickname = actor.getNickname() == null ? "" : actor.getNickname().trim();
+            if (nickname.isEmpty()) nickname = "校园用户";
+            if (nickname.length() > 50) nickname = nickname.substring(0, 50);
+            String avatar = actor.getAvatar();
+            if (avatar != null && avatar.length() > 500) avatar = null;
+            sendNotification(sellerId, "favorite", nickname + "收藏了你的商品",
+                    nickname + "收藏了「" + productTitle + "」", productId, actor.getId(), nickname, avatar);
+        } catch (Exception ex) {
+            log.error("创建收藏通知失败：productId={}", productId, ex);
+        }
+    }
+
+    private void sendNotification(Long userId, String type, String title, String content, Long relatedId,
+                                  Long actorUserId, String actorNickname, String actorAvatar) {
         // 通知是业务事件的附属操作，整体兜底异常，绝不影响调用方（如下单事务）的主流程
         try {
             // 1. 通知落库
@@ -46,6 +75,9 @@ public class NotificationServiceImpl implements NotificationService {
             n.setTitle(title);  // 标题
             n.setContent(content);  // 内容
             n.setRelatedId(relatedId);  // 关联业务ID
+            n.setActorUserId(actorUserId);
+            n.setActorNickname(actorNickname);
+            n.setActorAvatar(actorAvatar);
             n.setIsRead(false);  // 默认未读
             n.setCreateTime(new Date());  // 创建时间
             notificationMapper.insert(n);  // 插入数据库（回填自增id）

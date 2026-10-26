@@ -49,6 +49,7 @@ class OrderServiceImplTest {
     private RLock rLock;
     private NotificationService notificationService;
     private OrderServiceImpl service;
+    private com.secondhand.websocket.ProductChangePublisher productChanges;
 
     @BeforeEach
     void setUp() throws InterruptedException {
@@ -79,6 +80,8 @@ class OrderServiceImplTest {
         ReflectionTestUtils.setField(service, "redissonClient", redissonClient);
         ReflectionTestUtils.setField(service, "notificationService", notificationService);
         ReflectionTestUtils.setField(service, "evaluationMapper", mock(EvaluationMapper.class));
+        productChanges = mock(com.secondhand.websocket.ProductChangePublisher.class);
+        ReflectionTestUtils.setField(service, "productChanges", productChanges);
     }
 
     @Test
@@ -215,6 +218,7 @@ class OrderServiceImplTest {
         assertThat(service.cancelOrder(20L, 10L).getCode()).isEqualTo(200);
         assertThat(order.getStatus()).isEqualTo(4);
         assertThat(product.getStock()).isEqualTo(1);
+        verify(productChanges).publish(40L);
     }
 
     @Test
@@ -239,6 +243,7 @@ class OrderServiceImplTest {
         when(productImageMapper.selectByProductIds(any())).thenReturn(java.util.List.of(image));
         when(productMapper.selectById(40L)).thenReturn(product);
         assertThat(service.createOrder(20L, 40L, 2, "Test address").getCode()).isEqualTo(200);
+        verify(productChanges).publish(40L);
         ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
         verify(orderMapper).insert(saved.capture());
         Order order = saved.getValue(); order.setId(10L);

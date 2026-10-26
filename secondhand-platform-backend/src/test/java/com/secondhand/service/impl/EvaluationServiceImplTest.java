@@ -13,6 +13,7 @@ import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
 import com.secondhand.mapper.UserMapper;
 import com.secondhand.util.Result;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -109,10 +110,13 @@ class EvaluationServiceImplTest {
         assertThat(enriched.getProductTitle()).isEqualTo("iPhone 16 Pro");
         assertThat(enriched.getProductImage()).isEqualTo("https://example.com/product.png");
         assertThat(enriched.getProductId()).isEqualTo(10L);
+        assertThat(enriched.getFromUserId()).isEqualTo(30L);
+        assertThat(enriched.getOrderId()).isNull();
+        assertThat(evaluation.getOrderId()).isEqualTo(20L);
     }
 
     @Test
-    void anonymousEvaluationHidesReviewerIdentity() {
+    void anonymousEvaluationHidesReviewerIdentity() throws Exception {
         EvaluationMapper evaluationMapper = mock(EvaluationMapper.class);
         OrderMapper orderMapper = mock(OrderMapper.class);
         ProductMapper productMapper = mock(ProductMapper.class);
@@ -165,5 +169,83 @@ class EvaluationServiceImplTest {
         assertThat(enriched.getFromUserNickname()).isEqualTo("匿名用户");
         assertThat(enriched.getFromUserAvatar()).isNull();
         assertThat(enriched.getProductTitle()).isEqualTo("匿名商品");
+        assertThat(enriched.getFromUserId()).isNull();
+        assertThat(enriched.getOrderId()).isNull();
+        // 只处理公开响应，不抹掉数据库实体上的真实身份与订单关联。
+        assertThat(evaluation.getFromUserId()).isEqualTo(31L);
+        assertThat(evaluation.getOrderId()).isEqualTo(21L);
+        assertThat(enriched).isNotSameAs(evaluation);
+        com.fasterxml.jackson.databind.JsonNode json = new ObjectMapper().valueToTree(result);
+        com.fasterxml.jackson.databind.JsonNode record = json.path("data").path("records").get(0);
+        assertThat(record.path("fromUserId").isNull()).isTrue();
+        assertThat(record.path("orderId").isNull()).isTrue();
+    }
+
+    @Test
+    void evaluationsKeepTitleAndImageFromPurchaseEvenAfterSellerChangesProduct() {
+        SnapshotFixture fixture = new SnapshotFixture();
+        fixture.order.setSnapshotTitle("下单时的商品名称");
+        fixture.order.setSnapshotImage("/uploads/original.jpg");
+        Evaluation view = fixture.query();
+        assertThat(view.getProductTitle()).isEqualTo("下单时的商品名称");
+        assertThat(view.getProductImage()).isEqualTo("/uploads/original.jpg");
+    }
+
+    @Test
+    void newOrderWithoutCoverDoesNotAcquireImageAddedAfterPurchase() {
+        SnapshotFixture fixture = new SnapshotFixture();
+        fixture.order.setSnapshotTitle("下单时无封面");
+        fixture.order.setSnapshotImage(null);
+        assertThat(fixture.query().getProductImage()).isNull();
+    }
+
+    @Test
+    void snapshotRemainsVisibleWhenCurrentProductIsMissing() {
+        SnapshotFixture fixture = new SnapshotFixture();
+        fixture.order.setSnapshotTitle("历史商品");
+        fixture.order.setSnapshotImage("/uploads/original.jpg");
+        when(fixture.products.selectBatchIds(any())).thenReturn(Collections.emptyList());
+        when(fixture.images.selectByProductIds(any())).thenReturn(Collections.emptyList());
+        Evaluation view = fixture.query();
+        assertThat(view.getProductTitle()).isEqualTo("历史商品");
+        assertThat(view.getProductImage()).isEqualTo("/uploads/original.jpg");
+    }
+
+    private static class SnapshotFixture {
+        final ProductMapper products = mock(ProductMapper.class);
+        final ProductImageMapper images = mock(ProductImageMapper.class);
+        final Order order = new Order();
+        final EvaluationServiceImpl service = new EvaluationServiceImpl();
+
+        SnapshotFixture() {
+            EvaluationMapper evaluations = mock(EvaluationMapper.class);
+            OrderMapper orders = mock(OrderMapper.class);
+            UserMapper users = mock(UserMapper.class);
+            Evaluation evaluation = new Evaluation();
+            evaluation.setOrderId(20L);
+            evaluation.setFromUserId(30L);
+            Page<Evaluation> page = new Page<>(1, 12);
+            page.setRecords(Collections.singletonList(evaluation));
+            order.setId(20L); order.setProductId(10L);
+            Product product = new Product();
+            product.setId(10L); product.setTitle("卖家后来修改的名称");
+            ProductImage image = new ProductImage();
+            image.setProductId(10L); image.setUrl("/uploads/later.jpg");
+            when(evaluations.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+            when(orders.selectBatchIds(any())).thenReturn(Collections.singletonList(order));
+            when(users.selectBatchIds(any())).thenReturn(Collections.emptyList());
+            when(products.selectBatchIds(any())).thenReturn(Collections.singletonList(product));
+            when(images.selectByProductIds(any())).thenReturn(Collections.singletonList(image));
+            ReflectionTestUtils.setField(service, "evaluationMapper", evaluations);
+            ReflectionTestUtils.setField(service, "orderMapper", orders);
+            ReflectionTestUtils.setField(service, "productMapper", products);
+            ReflectionTestUtils.setField(service, "productImageMapper", images);
+            ReflectionTestUtils.setField(service, "userMapper", users);
+        }
+
+        Evaluation query() {
+            Page<Evaluation> page = (Page<Evaluation>) service.getUserEvaluations(40L, 1, 12).getData();
+            return page.getRecords().get(0);
+        }
     }
 }

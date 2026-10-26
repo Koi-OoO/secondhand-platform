@@ -5,11 +5,20 @@ import {
   getOnlineUserIdFromReceivedMessage,
   getPeerIdFromMessage,
   mergeConversationItems,
+  mergeChatRefresh,
   normalizeChatRecords,
   normalizePresenceStatus,
   pruneResolvedPendingConversations,
   upsertMessage
 } from './messageState.js'
+
+test('background chat response retains messages received after the request started without duplicates', () => {
+  const baseline = [{id:1,content:'old'}]
+  const reply = [{id:1,content:'server'}, {id:2,content:'already returned'}]
+  const live = [...baseline,{id:2,content:'already returned'},{id:3,content:'new socket message'}]
+  assert.deepEqual(mergeChatRefresh(reply,live,baseline),[...reply,live[2]])
+  assert.deepEqual(mergeChatRefresh([],baseline,baseline),[])
+})
 
 test('normalizes chat records from newest-first to oldest-first', () => {
   const records = [

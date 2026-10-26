@@ -29,6 +29,7 @@ class ProductDetailCacheSwitchTest {
             .withBean(ProductImageMapper.class, () -> images)
             .withBean(CategoryMapper.class, () -> mock(CategoryMapper.class))
             .withBean(CacheUtil.class, () -> cache)
+            .withBean(com.secondhand.websocket.ProductChangePublisher.class, () -> mock(com.secondhand.websocket.ProductChangePublisher.class))
             .withBean(RedisTemplate.class, () -> redis)
             .withBean(RedissonClient.class, () -> mock(RedissonClient.class))
             .withUserConfiguration(ProductServiceImpl.class);

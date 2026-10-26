@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController  // 标识为REST控制器，返回JSON数据
 @RequestMapping("/product")  // 请求路径前缀为 /product
-@Tag(name = "商品管理", description = "提供商品浏览、发布、编辑、上下架、收藏和举报等接口")  // Swagger文档标签
+@Tag(name = "商品管理", description = "提供商品浏览、发布、编辑、上下架和收藏等接口")  // Swagger文档标签
 @ApiResponse(responseCode = "200", description = "统一Result响应",
         content = @Content(schema = @Schema(implementation = Result.class)))
 public class ProductController {
@@ -269,7 +269,7 @@ public class ProductController {
      * 举报商品
      */
     @PostMapping("/{id}/report")  // POST请求，路径 /product/{id}/report
-    @Operation(summary = "举报商品", description = "需要登录，同一用户24小时内对同一商品最多举报一次")
+    @Operation(hidden = true, summary = "举报商品（暂未开放）")
     public Result report(@Parameter(description = "商品ID", example = "100", required = true)
                          @PathVariable Long id,  // 商品ID
                          @Parameter(description = "举报原因", example = "虚假信息", required = true)

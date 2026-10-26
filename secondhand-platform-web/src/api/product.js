@@ -17,6 +17,10 @@ export function getProductDetail(id) {
   return http.get(`/product/detail/${id}`)
 }
 
+export function getProductAvailability(ids) {
+  return http.get('/product/availability', { params: { ids: ids.join(',') }, skipErrorMessage: true })
+}
+
 /** 热门搜索词 TOP10 */
 export function getHotKeywords() {
   return http.get('/product/hot-keywords')
@@ -69,13 +73,6 @@ export function getMyFavorites(params = {}) {
 /** 查询当前用户是否已收藏某商品 */
 export function getFavoriteStatus(id) {
   return http.get(`/product/${id}/favorite/status`)
-}
-
-// ═══ 举报 ═══
-
-/** 举报商品 */
-export function reportProduct(id, reason, detail) {
-  return http.post(`/product/${id}/report`, null, { params: { reason, detail } })
 }
 
 /** 卖家删除商品（仅限已下架或已售出） */

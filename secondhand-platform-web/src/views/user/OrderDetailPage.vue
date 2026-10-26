@@ -66,6 +66,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useOrderRefresh } from '@/composables/useOrderRefresh'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { remindBuyer, reportDeliveryIssue, acceptOrder, getOrderDetail, cancelOrder, deliverOrder, rejectOrder, confirmOrder } from '@/api/order'
@@ -73,13 +74,12 @@ import { proposeMeetup } from '@/api/meetupProposal'
 import { evaluate } from '@/api/evaluation'
 import { createConversation } from '@/api/message'
 import { useUserStore } from '@/stores/user'
-import { useMessageStore } from '@/stores/message'
 import { formatDate, formatPrice } from '@/utils/format'
 import { ORDER_STATUS } from '@/utils/constant'
 import { orderActions, orderTimeline, reminderCooling } from '@/utils/orderDetail'
 import ImageViewer from '@/components/common/ImageViewer.vue'
 
-const route = useRoute(), router = useRouter(), userStore = useUserStore(), messageStore = useMessageStore()
+const route = useRoute(), router = useRouter(), userStore = useUserStore()
 const order = ref(null), loading = ref(false), error = ref(''), acting = ref(false), viewerVisible = ref(false), evaluationVisible = ref(false)
 const proposalVisible = ref(false), proposedTime = ref(''), proposing = ref(false)
 const evaluation = reactive({ rating: 5, content: '', anonymous: false })
@@ -89,19 +89,19 @@ const timeline = computed(() => order.value ? orderTimeline(order.value) : [])
 const statusText = computed(() => order.value?.cancelType === 2 && order.value?.status === 4 ? '卖家拒绝交付' : ORDER_STATUS[order.value?.status])
 const labels = { remind: '提醒买家确认', issue: '未收到／交易有问题', accept: '接单', cancel: '取消订单', deliver: '已交付，请买家确认', reject: '拒绝/取消交易', confirm: '确认收到，完成交易', evaluate: '评价订单' }
 let loadVersion = 0
-async function load() {
+async function load(silent = false) {
   const version = ++loadVersion
-  loading.value = true
-  error.value = ''
+  const quiet = silent === true
+  if (!quiet) { loading.value = true; error.value = '' }
   try {
-    const data = await getOrderDetail(route.params.id)
+    const data = await getOrderDetail(route.params.id, { skipErrorMessage: quiet })
     if (version === loadVersion) order.value = data
   } catch (ex) {
-    if (version === loadVersion) error.value = ex.message || '订单加载失败'
+    if (version === loadVersion && !quiet) error.value = ex.message || '订单加载失败'
   } finally { if (version === loadVersion) loading.value = false }
 }
 watch(() => route.params.id, () => { order.value = null; evaluationVisible.value = false; proposalVisible.value = false; proposedTime.value = ''; load() }, { immediate: true })
-watch(() => messageStore.latestNotification, n => { if (n?.type === 'order' && String(n.relatedId) === String(route.params.id) && !acting.value) load() })
+useOrderRefresh(() => load(true), n => String(n.relatedId) === String(route.params.id), () => acting.value || proposing.value)
 function backToOrders() { router.push({ name: 'MyOrders', query: { tab: isBuyer.value ? 'bought' : 'sold' } }) }
 async function contact() {
   if (acting.value) return

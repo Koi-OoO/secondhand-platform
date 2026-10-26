@@ -64,6 +64,8 @@ public class OrderServiceImpl implements OrderService {
     private RedissonClient redissonClient;
     @Autowired  // 注入通知服务（订单状态变更时通知买卖家）
     private NotificationService notificationService;
+    @Autowired
+    private com.secondhand.websocket.ProductChangePublisher productChanges;
 
     // 订单分布式锁的key前缀
     private static final String ORDER_LOCK_KEY = "order:lock:product:";
@@ -274,6 +276,7 @@ public class OrderServiceImpl implements OrderService {
         productMapper.updateById(product);  // 更新商品
         // 删除商品详情缓存
         redisTemplate.delete("product:detail:" + productId);
+        if (productChanges != null) productChanges.publish(productId);
 
         // 记录日志
         log.info("订单创建成功：订单号={} 买家ID={} 商品ID={} 数量={}",
@@ -851,6 +854,7 @@ public class OrderServiceImpl implements OrderService {
             productMapper.updateById(product);
             // 删除商品详情缓存
             redisTemplate.delete("product:detail:" + product.getId());
+            if (productChanges != null) productChanges.publish(product.getId());
         } catch (InterruptedException ex) {
             // 中断异常，恢复中断状态
             Thread.currentThread().interrupt();

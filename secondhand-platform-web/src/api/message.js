@@ -20,12 +20,13 @@ export function createConversation(peerId, productId, options = {}) {
   })
 }
 
-export function getConversations() {
-  return http.get('/message/conversations')
+export function getConversations(options = {}) {
+  return http.get('/message/conversations', options)
 }
 
-export function getChat(peerId, params = {}) {
+export function getChat(peerId, params = {}, options = {}) {
   return http.get('/message/chat', {
+    ...options,
     params: {
       peerId,
       page: params.page || 1,
@@ -34,16 +35,17 @@ export function getChat(peerId, params = {}) {
   })
 }
 
-export function getMessageUnreadCount() {
-  return http.get('/message/unread-count')
+export function getMessageUnreadCount(options = {}) {
+  return http.get('/message/unread-count', options)
 }
 
-export function getOnlineStatus(userIds = []) {
+export function getOnlineStatus(userIds = [], options = {}) {
   const ids = [...new Set(userIds.map(Number).filter(id => id > 0))]
   if (!ids.length) {
     return Promise.resolve({})
   }
   return http.get('/message/online-status', {
+    ...options,
     params: {
       userIds: ids.join(',')
     }

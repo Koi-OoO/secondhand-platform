@@ -1,5 +1,5 @@
 <template>
-  <main class="messages-page">
+  <main class="messages-page" :class="{ 'messages-page--chat': !notificationTab }">
     <div class="message-tabs" role="group" aria-label="消息类型">
       <el-button :type="notificationTab ? 'default' : 'primary'" @click="router.push({ name: 'Messages' })">私聊 <span v-if="messageStore.unreadCount">（{{ messageStore.unreadCount }}）</span></el-button>
       <el-button :type="notificationTab ? 'primary' : 'default'" @click="router.push({ name: 'Messages', query: { tab: 'notifications' } })">系统通知 <span v-if="messageStore.notificationUnreadCount">（{{ messageStore.notificationUnreadCount }}）</span></el-button>
@@ -142,6 +142,7 @@ import NotificationInbox from './NotificationInbox.vue'
 import ChatOrdersDrawer from './ChatOrdersDrawer.vue'
 import MeetupProposalCard from './MeetupProposalCard.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useOrderRefresh } from '@/composables/useOrderRefresh'
 import { useRoute, useRouter } from 'vue-router'
 import { ChatDotRound, Promotion, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -154,7 +155,7 @@ import {
   formatPresenceStatus,
   getPeerIdFromMessage,
   mergeConversationItems,
-  normalizeChatRecords,
+  mergeChatRefresh,
   pruneResolvedPendingConversations,
   upsertMessage,
   upsertPendingConversation
@@ -211,6 +212,7 @@ onMounted(async () => {
 watch([selectedPeerId, notificationTab], () => { peerOrdersVisible.value = false })
 
 onUnmounted(() => {
+  chatLoadVersion++
   if (onlineTimer) {
     window.clearInterval(onlineTimer)
   }
@@ -335,6 +337,11 @@ function selectPeer(peerId, replace = false) {
   }
 }
 
+let chatLoadVersion = 0
+useOrderRefresh(() => {
+  if (!notificationTab.value && selectedPeerId.value) return loadChat(selectedPeerId.value, { silent: true, preservePosition: true })
+}, () => true, () => sending.value)
+
 async function loadChat(peerId, options = {}) {
   if (!peerId) {
     return
@@ -342,17 +349,27 @@ async function loadChat(peerId, options = {}) {
   if (!options.silent) {
     chatLoading.value = true
   }
+  const version = ++chatLoadVersion
+  const body = chatBody.value
+  const top = body?.scrollTop || 0
+  const atBottom = !body || body.scrollHeight - body.clientHeight - top < 60
+  const baseline = [...messages.value]
   try {
-    const data = await getChat(peerId, { page: 1, size: 80 })
-    messages.value = normalizeChatRecords(data.records || [])
+    const data = await getChat(peerId, { page: 1, size: 80 }, { skipErrorMessage: !!options.silent })
+    if (version !== chatLoadVersion || peerId !== selectedPeerId.value) return
+    messages.value = mergeChatRefresh(data.records || [], messages.value, baseline)
     await Promise.allSettled([
       refreshConversationList(),
       messageStore.refreshUnreadCounts()
     ])
     await refreshVisibleOnlineStatus()
-    scrollToBottom()
+    if (version !== chatLoadVersion) return
+    if (options.preservePosition && !atBottom) {
+      await nextTick()
+      if (chatBody.value && version === chatLoadVersion) chatBody.value.scrollTop = top
+    } else scrollToBottom()
   } finally {
-    chatLoading.value = false
+    if (version === chatLoadVersion) chatLoading.value = false
   }
 }
 
@@ -431,15 +448,38 @@ async function scrollToBottom() {
 <style lang="scss" scoped>
 @use '@/assets/styles/variables.scss' as *;
 
-.message-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.message-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; // 窄屏或未读数字较长时允许换行
+  flex-shrink: 0;
+  gap: 8px; // 按钮间距只由这里控制
+  padding: 12px 16px 0; // 顶部留 12px、左右留 16px，避免按钮贴住导航和屏幕边缘
+  margin-bottom: 12px; // 按钮与聊天面板之间留白，给按钮阴影留出空间
+
+  > .el-button {
+    flex-shrink: 0;
+    margin: 0; // 清除组件默认间距，避免与 gap 叠加
+  }
+}
 
 .messages-page {
-  padding: 20px 0 $space-2xl;
+  padding: 0 0 $space-2xl; // 顶部留白统一交给按钮区控制，通知页只保留底部留白
+
+  &--chat {
+    display: flex;
+    min-height: 0; // 允许收缩，避免消息撑长整个页面
+    flex: 1; // 占满导航下方的剩余空间
+    flex-direction: column;
+    padding: 0; // 去掉私聊页上下留白，把高度留给聊天面板
+  }
 }
 
 .messages-shell {
   display: grid;
-  min-height: calc(100vh - 160px);
+  min-height: 0;
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr);
   grid-template-columns: 330px minmax(0, 1fr);
   border: $border-ink;
   border-radius: $radius-lg;
@@ -449,13 +489,18 @@ async function scrollToBottom() {
 }
 
 .conversation-pane {
+  display: flex;
+  min-height: 0;
   min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
   border-right: $border-ink;
   background: $color-paper;
 }
 
 .pane-header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: $space-md;
@@ -481,6 +526,7 @@ async function scrollToBottom() {
 
 .connection-row {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 7px;
   padding: 0 $space-lg $space-md;
@@ -503,8 +549,10 @@ async function scrollToBottom() {
 }
 
 .conversation-list {
-  max-height: calc(100vh - 260px);
+  min-height: 0;
+  flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
 }
 
@@ -660,7 +708,9 @@ async function scrollToBottom() {
 
 .chat-pane {
   display: grid;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   grid-template-rows: auto minmax(0, 1fr) auto;
   background: $color-paper-2;
 }
@@ -670,7 +720,7 @@ async function scrollToBottom() {
   align-items: center;
   justify-content: space-between;
   gap: $space-md;
-  padding: $space-lg;
+  padding: 8px 16px; // 压缩联系人栏上下留白，让消息区更高
   border-bottom: 1px solid $color-border-light;
   background: $color-bg-card;
 }
@@ -696,8 +746,9 @@ async function scrollToBottom() {
 
 .chat-body {
   min-height: 0;
-  overflow-y: auto;
-  padding: $space-lg;
+  overflow-y: auto; // 消息超出高度时，仅滚动消息区
+  overscroll-behavior: contain;
+  padding: 12px 16px; // 消息与边框的距离
 }
 
 .message-list {
@@ -754,7 +805,7 @@ async function scrollToBottom() {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  padding: $space-lg;
+  padding: 8px 12px; // 输入栏上下各留 8px，给消息区更多高度
   border-top: 1px solid $color-border-light;
   background: $color-bg-card;
 }
@@ -787,6 +838,7 @@ async function scrollToBottom() {
 @media (max-width: 860px) {
   .messages-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .conversation-pane {
@@ -796,25 +848,28 @@ async function scrollToBottom() {
 
   .conversation-list {
     display: flex;
-    max-height: none;
+    flex: none;
     overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .conversation-item {
+    flex-shrink: 0;
+    width: 260px;
     min-width: 260px;
   }
 
-  .chat-pane {
-    min-height: 560px;
+  .pane-header {
+    padding: 12px;
+    h1 { font-size: 20px; }
   }
+
+  .connection-row { padding: 0 12px 8px; }
 }
 
 @media (max-width: 640px) {
-  .message-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-
-.messages-page {
-    padding-top: 12px;
-  }
+  .conversation-pane .pane-header { display: none; }
+  .connection-row { padding-top: 8px; }
 
   .messages-shell {
     border-right: 0;
@@ -829,7 +884,9 @@ async function scrollToBottom() {
 
   .composer {
     display: flex;
-    flex-direction: column;
+    align-items: flex-end;
+    > :first-child { min-width: 0; flex: 1; }
+    .el-button { flex-shrink: 0; }
   }
 
   .message-bubble {

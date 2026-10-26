@@ -57,9 +57,9 @@ export const useMessageStore = defineStore('message', () => {
     }
 
     try {
-      conversations.value = await getConversations()
+      conversations.value = await getConversations({ skipErrorMessage: true })
     } catch {
-      conversations.value = []
+      // 暂时断网时保留当前会话列表，退出登录仍由 reset 清理。
     }
   }
 
@@ -72,8 +72,8 @@ export const useMessageStore = defineStore('message', () => {
     }
 
     const [messageResult, notificationResult] = await Promise.allSettled([
-      getMessageUnreadCount(),
-      getNotificationUnreadCount()
+      getMessageUnreadCount({ skipErrorMessage: true }),
+      getNotificationUnreadCount({ skipErrorMessage: true })
     ])
     if (messageResult.status === 'fulfilled') {
       unreadCount.value = Number(messageResult.value || 0)
@@ -96,7 +96,7 @@ export const useMessageStore = defineStore('message', () => {
     }
 
     try {
-      const data = await getOnlineStatus(ids)
+      const data = await getOnlineStatus(ids, { skipErrorMessage: true })
       const normalized = Object.fromEntries(
         Object.entries(data || {}).map(([id, status]) => [id, normalizePresenceStatus(status)])
       )
@@ -154,6 +154,9 @@ export const useMessageStore = defineStore('message', () => {
       connecting.value = false
       reconnectAttempts = 0
       startHeartbeat()
+      // 重连期间可能错过推送，未读数和会话摘要以服务端重新查询为准。
+      refreshConversations()
+      refreshUnreadCounts()
     }
 
     socket.onmessage = event => {

@@ -34,6 +34,15 @@ public class Notification {
     @Schema(description = "关联业务 ID（如订单 ID）")
     private Long relatedId;
 
+    @Schema(description = "互动发起者公开用户 ID，历史通知可能为空")
+    private Long actorUserId;
+
+    @Schema(description = "通知产生时的发起者昵称")
+    private String actorNickname;
+
+    @Schema(description = "通知产生时的发起者头像")
+    private String actorAvatar;
+
     @Schema(description = "是否已读", accessMode = Schema.AccessMode.READ_ONLY)
     private Boolean isRead;  // Boolean包装类型，映射is_read列（下划线转驼峰）
 

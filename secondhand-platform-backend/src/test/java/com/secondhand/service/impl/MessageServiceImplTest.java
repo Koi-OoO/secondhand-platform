@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -61,6 +62,25 @@ class MessageServiceImplTest {
         ReflectionTestUtils.setField(service, "conversationMapper", conversationMapper);
         ReflectionTestUtils.setField(service, "userMapper", userMapper);
         ReflectionTestUtils.setField(service, "chatWebSocketHandler", chatWebSocketHandler);
+    }
+
+    @Test
+    void firstMessageSucceedsWhenAnotherRequestAlreadyCreatedTheSameConversation() {
+        User receiver = new User(); receiver.setId(2L);
+        when(userMapper.selectById(2L)).thenReturn(receiver);
+        // 普通查询未看见对方刚提交的会话，旧的“先查后插”会命中唯一键冲突。
+        when(conversationMapper.selectByPair(1L, 2L)).thenReturn(null);
+        doThrow(new org.springframework.dao.DuplicateKeyException("conversation.uk_user_pair"))
+                .when(conversationMapper).insert(any(Conversation.class));
+        doAnswer(invocation -> { ((Message) invocation.getArgument(0)).setId(99L); return 1; })
+                .when(messageMapper).insert(any(Message.class));
+
+        Result result = service.send(1L, 2L, "第一条消息", 100L);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(((Message) result.getData()).getId()).isEqualTo(99L);
+        verify(messageMapper).insert(any(Message.class));
+        verify(chatWebSocketHandler).sendToUser(eq(2L), anyString());
     }
 
     @Test
@@ -115,12 +135,14 @@ class MessageServiceImplTest {
         peer.setNickname("卖家");
         peer.setAvatar("avatar.png");
         when(userMapper.selectById(2L)).thenReturn(peer);
-        when(conversationMapper.selectByPair(1L, 2L)).thenReturn(null);
+        Conversation[] stored = new Conversation[1];
+        when(conversationMapper.selectByPair(1L, 2L)).thenAnswer(invocation -> stored[0]);
         doAnswer(invocation -> {
             Conversation conversation = invocation.getArgument(0);
             conversation.setId(10L);
+            stored[0] = conversation;
             return 1;
-        }).when(conversationMapper).insert(any(Conversation.class));
+        }).when(conversationMapper).ensureExists(any(Conversation.class));
 
         Result result = service.createOrGetConversation(1L, 2L, 100L);
 
@@ -137,7 +159,7 @@ class MessageServiceImplTest {
                 .containsEntry("unreadCount", 0);
 
         ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
-        verify(conversationMapper).insert(captor.capture());
+        verify(conversationMapper).ensureExists(captor.capture());
         Conversation saved = captor.getValue();
         assertThat(saved.getUser1Id()).isEqualTo(1L);
         assertThat(saved.getUser2Id()).isEqualTo(2L);
@@ -156,7 +178,7 @@ class MessageServiceImplTest {
 
         assertThat(missingPeer.getCode()).isEqualTo(500);
         assertThat(missingPeer.getMessage()).isEqualTo("联系人不存在");
-        verify(conversationMapper, never()).insert(any(Conversation.class));
+        verify(conversationMapper, never()).ensureExists(any(Conversation.class));
     }
 
     @Test
@@ -172,6 +194,10 @@ class MessageServiceImplTest {
 
         when(userMapper.selectById(2L)).thenReturn(peer);
         when(conversationMapper.selectByPair(1L, 2L)).thenReturn(existing);
+        doAnswer(invocation -> {
+            if (existing.getProductId() == null) existing.setProductId(((Conversation) invocation.getArgument(0)).getProductId());
+            return 1;
+        }).when(conversationMapper).ensureExists(any(Conversation.class));
 
         Result result = service.createOrGetConversation(1L, 2L, 100L);
 
@@ -186,8 +212,8 @@ class MessageServiceImplTest {
                 .containsEntry("productId", 100L);
 
         ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
-        verify(conversationMapper).updateById(captor.capture());
-        assertThat(captor.getValue().getId()).isEqualTo(11L);
+        verify(conversationMapper).ensureExists(captor.capture());
+        assertThat(captor.getValue().getUser1Id()).isEqualTo(1L);
         assertThat(captor.getValue().getProductId()).isEqualTo(100L);
     }
 
@@ -211,9 +237,10 @@ class MessageServiceImplTest {
 
         assertThat(result.getCode()).isEqualTo(200);
         ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
-        verify(conversationMapper).updateById(captor.capture());
+        verify(conversationMapper).upsertAfterMessage(captor.capture());
         Conversation updated = captor.getValue();
-        assertThat(updated.getId()).isEqualTo(7L);
+        assertThat(updated.getUser1Id()).isEqualTo(1L);
+        assertThat(updated.getUser2Id()).isEqualTo(2L);
         assertThat(updated.getLastMessageId()).isEqualTo(99L);
         assertThat(updated.getProductId()).isEqualTo(100L);
         assertThat(updated.getLastTime()).isNotNull();

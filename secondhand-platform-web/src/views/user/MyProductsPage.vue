@@ -22,6 +22,7 @@
             </div>
             <div class="product-item__price">{{ formatPrice(item.price) }}</div>
             <div class="product-item__meta">
+              <span>库存 {{ item.stock ?? 0 }}</span>
               <span>{{ item.viewCount }} 浏览</span>
               <span>{{ formatDate(item.createTime) }}</span>
             </div>
@@ -84,6 +85,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useProductAvailability } from '@/composables/useProductAvailability'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProductPage, offShelfProduct, onShelfProduct, deleteProduct } from '@/api/product'
 import { useUserStore } from '@/stores/user'
@@ -95,6 +97,11 @@ const products = ref([])
 const loading = ref(true)
 const actionLoading = ref({})
 const statusMap = PRODUCT_STATUS
+
+useProductAvailability(() => products.value, rows => {
+  const byId = new Map(rows.map(row => [Number(row.id), row]))
+  products.value.forEach(product => { const row = byId.get(Number(product.id)); if (row) Object.assign(product, row) })
+})
 
 onMounted(fetchProducts)
 

@@ -54,7 +54,6 @@ public class ProductServiceImpl implements ProductService {
     private static final String PRODUCT_LOCK_KEY = "product:lock:";     // 商品分布式锁前缀
     private static final String PRODUCT_CACHE_KEY = "product:detail:";  // 商品详情缓存前缀
     private static final String HOT_KEYWORD_KEY = "hot:keywords";       // 热门搜索词有序集合键
-    private static final String REPORT_KEY = "report:";                 // 商品举报去重键前缀
 
     // ==================== 超时与锁配置常量 ====================
     private static final long LOCK_WAIT_TIME = 3;        // 分布式锁等待时间（秒）
@@ -81,6 +80,12 @@ public class ProductServiceImpl implements ProductService {
 
     @Autowired  // 注入缓存工具类
     private CacheUtil cacheUtil;
+    @Autowired
+    private com.secondhand.websocket.ProductChangePublisher productChanges;
+
+    private void productChanged(Long id) {
+        if (productChanges != null) productChanges.publish(id);
+    }
 
     // 仅控制商品详情的缓存读写；关闭后仍保留浏览统计和交易锁。
     @Value("${app.cache.product-detail.enabled:true}")
@@ -380,6 +385,7 @@ public class ProductServiceImpl implements ProductService {
         redisTemplate.delete(PRODUCT_CACHE_KEY + product.getId());
 
         log.info("用户 {} 更新了商品 [{}]", userId, product.getId());
+        productChanged(product.getId());
         return Result.success("更新成功");
     }
 
@@ -501,6 +507,7 @@ public class ProductServiceImpl implements ProductService {
             redisTemplate.delete(PRODUCT_CACHE_KEY + productId);
 
             log.info("用户 {} 下架了商品 [{}]", userId, productId);
+            productChanged(productId);
             return Result.success("下架成功");
         } catch (InterruptedException ex) {
             // 中断异常，恢复中断状态
@@ -560,6 +567,7 @@ public class ProductServiceImpl implements ProductService {
             redisTemplate.delete(PRODUCT_CACHE_KEY + productId);
 
             log.info("用户 {} 上架了商品 [{}]", userId, productId);
+            productChanged(productId);
             return Result.success("上架成功");
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -607,6 +615,7 @@ public class ProductServiceImpl implements ProductService {
         redisTemplate.delete(PRODUCT_CACHE_KEY + productId);
 
         log.info("用户 {} 删除了商品 [{}]", userId, productId);
+        productChanged(productId);
         return Result.success("删除成功");
     }
 
@@ -647,33 +656,8 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Result reportProduct(Long userId, Long productId, String reason, String detail) {
-        // 参数校验
-        if (userId == null || productId == null || productId <= 0) {
-            return Result.error("参数错误");
-        }
-        if (reason == null || reason.trim().isEmpty()) {
-            return Result.error("请选择举报原因");
-        }
-
-        // 校验商品是否存在且未删除
-        Product product = productMapper.selectById(productId);
-        if (product == null || product.getStatus() == 4) {
-            return Result.error("商品不存在");
-        }
-
-        // Redis去重：24小时内不能重复举报
-        String dedupKey = REPORT_KEY + userId + ":" + productId;
-        Boolean exists = redisTemplate.hasKey(dedupKey);
-        if (Boolean.TRUE.equals(exists)) {
-            return Result.error("您已举报过该商品，请等待处理");
-        }
-        // 设置24小时过期
-        redisTemplate.opsForValue().set(dedupKey, "1", 24, TimeUnit.HOURS);
-
-        // 记录举报日志（可接入审核系统）
-        log.warn("商品举报：用户ID={} 商品ID={} 商品标题={} 举报原因={} 补充说明={}",
-                userId, productId, product.getTitle(), reason, detail != null ? detail : "");
-        return Result.success("举报已提交，我们会尽快处理");
+        // 保留旧接口兼容请求；待具备持久化记录和处理流程后再开放。
+        return Result.error("举报功能暂未开放");
     }
 
     /**

@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -120,7 +121,12 @@ public class EvaluationServiceImpl implements EvaluationService {
         IPage<Evaluation> result = evaluationMapper.selectPage(pageObj, wrapper);
 
         // 获取评价列表
-        List<Evaluation> evals = result.getRecords();
+        // 单独组装公开响应，隐藏身份时不修改承载数据库记录的原始实体。
+        List<Evaluation> evals = result.getRecords().stream().map(source -> {
+            Evaluation view = new Evaluation();
+            BeanUtils.copyProperties(source, view);
+            return view;
+        }).collect(Collectors.toList());
         // 如果有数据，批量关联查询相关信息
         if (!evals.isEmpty()) {
             // 1. 批量查询评价人信息
@@ -182,16 +188,25 @@ public class EvaluationServiceImpl implements EvaluationService {
                     ev.setProductId(order.getProductId());
                     Product product = productMap.get(order.getProductId());
                     // 优先用订单快照的商品标题，没有则用当前商品标题
-                    ev.setProductTitle(order.getProductTitle() != null
-                            ? order.getProductTitle()
+                    ev.setProductTitle(order.getSnapshotTitle() != null
+                            ? order.getSnapshotTitle()
                             : product != null ? product.getTitle() : null);
-                    // 优先用订单快照的商品图片，没有则用当前商品首图
-                    ev.setProductImage(order.getProductImage() != null
-                            ? order.getProductImage()
+                    // 新订单可能在下单时就没有封面，不能替换成卖家后来添加的图片。
+                    boolean hasSnapshot = order.getSnapshotTitle() != null
+                            || order.getUnitPrice() != null || order.getSnapshotImage() != null;
+                    ev.setProductImage(hasSnapshot
+                            ? order.getSnapshotImage()
                             : productImageMap.get(order.getProductId()));
                 }
             }
         }
+
+        for (Evaluation ev : evals) {
+            // 公开列表不需要订单 ID；匿名评价也不能通过用户 ID 直接找回真实身份。
+            ev.setOrderId(null);
+            if (Boolean.TRUE.equals(ev.getAnonymous())) ev.setFromUserId(null);
+        }
+        result.setRecords(evals);
 
         // 返回分页结果
         return Result.success(result);

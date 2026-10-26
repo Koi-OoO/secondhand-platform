@@ -3,13 +3,33 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.secondhand.mapper.ConversationMapper">
 
-    <select id="selectByPair" resultType="com.secondhand.entity.Conversation">
+    <!-- 当前读：即使事务之前建立过一致性快照，也能看到原子写入命中的会话。 -->
+    <select id="selectByPair" resultType="com.secondhand.entity.Conversation" flushCache="true" useCache="false">
         SELECT *
         FROM conversation
         WHERE user1_id = #{user1Id}
           AND user2_id = #{user2Id}
         LIMIT 1
+        FOR UPDATE
     </select>
+
+    <insert id="ensureExists">
+        INSERT INTO conversation (user1_id, user2_id, product_id, last_time, create_time, update_time)
+        VALUES (#{user1Id}, #{user2Id}, #{productId}, #{lastTime}, #{createTime}, #{updateTime})
+        ON DUPLICATE KEY UPDATE
+            update_time = IF(product_id IS NULL AND VALUES(product_id) IS NOT NULL, VALUES(update_time), update_time),
+            product_id = COALESCE(product_id, VALUES(product_id))
+    </insert>
+
+    <insert id="upsertAfterMessage">
+        INSERT INTO conversation (user1_id, user2_id, product_id, last_message_id, last_time, create_time, update_time)
+        VALUES (#{user1Id}, #{user2Id}, #{productId}, #{lastMessageId}, #{lastTime}, #{createTime}, #{updateTime})
+        ON DUPLICATE KEY UPDATE
+            last_time = IF(last_message_id IS NULL OR last_message_id &lt; VALUES(last_message_id), VALUES(last_time), last_time),
+            update_time = IF(last_message_id IS NULL OR last_message_id &lt; VALUES(last_message_id), VALUES(update_time), update_time),
+            product_id = COALESCE(product_id, VALUES(product_id)),
+            last_message_id = GREATEST(COALESCE(last_message_id, 0), VALUES(last_message_id))
+    </insert>
 
     <!--
       从 conversation 表查询会话列表，因此点击“联系卖家”但尚未发消息的空会话也会返回。

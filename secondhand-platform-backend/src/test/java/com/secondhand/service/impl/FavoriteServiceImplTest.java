@@ -12,6 +12,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,6 +42,12 @@ class FavoriteServiceImplTest {
         ReflectionTestUtils.setField(service, "productMapper", productMapper);
         ReflectionTestUtils.setField(service, "productImageMapper", productImageMapper);
         ReflectionTestUtils.setField(service, "notificationService", notificationService);
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        when(redis.opsForValue()).thenReturn(values);
+        when(values.setIfAbsent(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.eq(24L), org.mockito.ArgumentMatchers.eq(TimeUnit.HOURS))).thenReturn(true);
+        ReflectionTestUtils.setField(service, "notificationRedis", redis);
     }
 
     @Test

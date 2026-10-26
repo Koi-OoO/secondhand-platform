@@ -72,7 +72,7 @@
               <el-icon class="seller-box__arrow"><ArrowRight /></el-icon>
             </div>
 
-            <div v-if="!isSeller && product.status === 1" class="buy-box">
+            <div v-if="!isSeller && product.status === 1 && product.stock > 0" class="buy-box">
               <span class="buy-box__label">购买数量</span>
               <el-input-number
                 v-model="purchaseQuantity"
@@ -82,7 +82,7 @@
               />
             </div>
 
-            <div class="action-row">
+            <div class="action-row" :class="{ 'action-row--buyer': !isSeller }">
               <template v-if="isSeller">
                 <el-tag :type="statusTagType(product.status)" effect="light" round>{{ statusMap[product.status] }}</el-tag>
                 <router-link v-if="product.status === 2" :to="`/product/${product.id}/edit`">
@@ -90,16 +90,19 @@
                 </router-link>
               </template>
               <template v-else>
-                <el-button type="primary" size="large" class="action-row__primary" :disabled="product.status !== 1" :loading="wantLoading" @click="onWant">
-                  {{ product.status === 1 ? '立即下单' : statusMap[product.status] }}
+                <el-button size="large" class="product-action product-action--favorite" :class="{ 'is-favorited': isFavorited }"
+                  :aria-pressed="isFavorited" :aria-label="isFavorited ? '取消收藏' : '收藏商品'"
+                  :title="isFavorited ? '已收藏，点击取消收藏' : '收藏这件商品'" :loading="favoriteLoading" @click="toggleFavorite">
+                  <el-icon v-if="!favoriteLoading" class="btn-icon"><StarFilled v-if="isFavorited" /><Star v-else /></el-icon>
+                  <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
                 </el-button>
-                <el-button size="large" :loading="favoriteLoading" @click="toggleFavorite">
-                  <el-icon class="btn-icon"><Star /></el-icon>
-                  {{ isFavorited ? '取消收藏' : '收藏商品' }}
+                <el-button size="large" class="product-action product-action--contact" :loading="contactLoading" @click="onContact">
+                  <el-icon v-if="!contactLoading" class="btn-icon"><ChatDotRound /></el-icon>
+                  <span>联系卖家</span>
                 </el-button>
-                <el-button size="large" :loading="contactLoading" @click="onContact">
-                  <el-icon class="btn-icon"><ChatDotRound /></el-icon>
-                  联系卖家
+                <el-button type="primary" size="large" class="product-action product-action--buy" :disabled="product.status !== 1 || !(product.stock > 0)" :loading="wantLoading" @click="onWant">
+                  <span>{{ product.status === 1 ? (product.stock > 0 ? '立即下单' : '暂时无库存') : statusMap[product.status] }}</span>
+                  <el-icon v-if="!wantLoading && product.status === 1" class="buy-arrow"><ArrowRight /></el-icon>
                 </el-button>
               </template>
             </div>
@@ -131,9 +134,10 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useProductAvailability } from '@/composables/useProductAvailability'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, Star, ChatDotRound, Location } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Star, StarFilled, ChatDotRound, Location } from '@element-plus/icons-vue'
 import { addFavorite, getFavoriteStatus, getProductDetail, getProductPage, removeFavorite } from '@/api/product'
 import { createOrder } from '@/api/order'
 import { createConversation } from '@/api/message'
@@ -164,6 +168,14 @@ const statusMap = PRODUCT_STATUS
 const images = computed(() => (product.value?.images || []).map(item => item.url))
 const sellerDisplayName = computed(() => product.value?.sellerNickname || product.value?.sellerUsername || '用户')
 const isSeller = computed(() => userStore.userInfo?.id === product.value?.sellerId)
+
+const { refreshAvailability } = useProductAvailability(() => product.value ? [product.value] : [], rows => {
+  const current = rows.find(row => Number(row.id) === Number(product.value?.id))
+  if (!current) return
+  product.value.stock = current.stock
+  product.value.status = current.status
+  purchaseQuantity.value = Math.min(purchaseQuantity.value, Math.max(1, current.stock))
+})
 
 onMounted(async () => {
   const id = Number(route.params.id)
@@ -270,11 +282,9 @@ async function onWant() {
   try {
     await createOrder(product.value.id, purchaseQuantity.value, address.trim())
     ElMessage.success('下单成功')
-    product.value.stock = Math.max(0, (product.value.stock || 0) - purchaseQuantity.value)
-    product.value.status = product.value.stock > 0 ? 1 : 3
-    purchaseQuantity.value = Math.min(purchaseQuantity.value, Math.max(1, product.value.stock || 1))
   } finally {
     wantLoading.value = false
+    refreshAvailability()
   }
 }
 
@@ -522,22 +532,101 @@ async function onContact() {
   flex-wrap: wrap;
   align-items: center;
 
-  &__primary {
-    flex: 1;
-    min-width: 140px;
-    background: linear-gradient(135deg, $color-primary, $color-primary-dark);
-    border-color: transparent;
-    box-shadow: $shadow-button;
-
-    &:hover {
-      background: linear-gradient(135deg, $color-primary-dark, $color-primary);
-      box-shadow: 0 10px 24px rgba($color-primary, 0.4);
-    }
+  &--buyer {
+    display: grid;
+    grid-template-columns: minmax(0, .72fr) minmax(0, 1fr) minmax(0, 1.3fr);
+    align-items: stretch;
   }
 }
 
-.btn-icon {
-  margin-right: 4px;
+.action-row--buyer .product-action {
+  width: 100%;
+  min-width: 0;
+  height: 52px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: $radius-md;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  white-space: nowrap;
+  transform: none;
+  transition: background $transition-fast, border-color $transition-fast, box-shadow $transition-fast, transform $transition-fast;
+
+  &:focus-visible {
+    outline: 3px solid $color-ink;
+    outline-offset: 4px;
+  }
+}
+
+.action-row--buyer .product-action--favorite {
+  color: $color-text-secondary;
+  background: transparent;
+  border: 1px solid $color-border-light;
+  box-shadow: none;
+
+  &:hover:not(:disabled) {
+    color: $color-ink;
+    background: $color-paper-3;
+    border-color: $color-ink-2;
+  }
+
+  &.is-favorited {
+    color: #795415;
+    background: #fff3d3;
+    border-color: #e3c784;
+  }
+}
+
+.action-row--buyer .product-action--contact {
+  color: $color-ink;
+  background: $color-paper-2;
+  border: 2px solid $color-ink;
+  box-shadow: none;
+
+  &:hover:not(:disabled) {
+    background: $color-paper-3;
+    border-color: $color-ink;
+  }
+}
+
+.action-row--buyer .product-action--buy {
+  color: #fff;
+  background: $color-primary;
+  border: 2px solid $color-ink;
+  box-shadow: 2px 3px 0 $color-ink;
+
+  &:hover:not(:disabled) {
+    background: $color-primary-dark;
+    border-color: $color-ink;
+    transform: translateY(-1px);
+    box-shadow: 2px 4px 0 $color-ink;
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+
+  &:disabled {
+    color: $color-text-muted;
+    background: $color-paper-3;
+    border-color: $color-border-light;
+    box-shadow: none;
+  }
+}
+
+.btn-icon { margin-right: 6px; font-size: 18px; }
+.buy-arrow { margin-left: 8px; font-size: 16px; }
+
+@media (max-width: 1120px) {
+  .action-row--buyer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .product-action--buy { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-row--buyer .product-action { transition: none; }
+  .action-row--buyer .product-action--buy:hover:not(:disabled),
+  .action-row--buyer .product-action--buy:active:not(:disabled) { transform: none; }
 }
 
 // === 区块 ===
@@ -637,8 +726,7 @@ async function onContact() {
 }
 
 @media (max-width: 640px) {
-  .action-row__primary {
-    flex: 1 1 100%;
-  }
+  .info-card { padding: 20px; }
+  .action-row--buyer .product-action { height: 48px; padding: 0 10px; }
 }
 </style>

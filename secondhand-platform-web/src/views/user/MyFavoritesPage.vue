@@ -38,6 +38,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useProductAvailability } from '@/composables/useProductAvailability'
 import { getMyFavorites } from '@/api/product'
 import ProductCard from '@/components/common/ProductCard.vue'
 
@@ -46,6 +47,11 @@ const loading = ref(true)
 const page = ref(1)
 const size = ref(12)
 const total = ref(0)
+
+useProductAvailability(() => list.value.map(item => item.product), rows => {
+  const byId = new Map(rows.map(row => [Number(row.id), row]))
+  list.value.forEach(item => { const row = byId.get(Number(item.product?.id)); if (row) Object.assign(item.product, row) })
+})
 
 onMounted(() => fetchData())
 

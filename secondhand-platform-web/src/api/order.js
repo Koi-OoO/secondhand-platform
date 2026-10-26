@@ -4,12 +4,12 @@ export function createOrder(productId, quantity, address) {
   return http.post('/order/create', null, { params: { productId, quantity, address } })
 }
 
-export function getBoughtOrders(params = {}) {
-  return http.get('/order/bought', { params })
+export function getBoughtOrders(params = {}, options = {}) {
+  return http.get('/order/bought', { ...options, params })
 }
 
-export function getSoldOrders(params = {}) {
-  return http.get('/order/sold', { params })
+export function getSoldOrders(params = {}, options = {}) {
+  return http.get('/order/sold', { ...options, params })
 }
 
 export function hideBoughtOrder(id) {
@@ -56,16 +56,16 @@ export function getPendingCount() {
   return http.get('/order/pending-count')
 }
 
-export function getOrderDetail(id) {
-  return http.get(`/order/${id}`)
+export function getOrderDetail(id, options = {}) {
+  return http.get(`/order/${id}`, options)
 }
 
 export function acceptOrder(id) {
   return http.put(`/order/${id}/accept`)
 }
 
-export function getOrdersWithUser(peerId, params = {}) {
-  return http.get(`/order/with-user/${peerId}`, { params })
+export function getOrdersWithUser(peerId, params = {}, options = {}) {
+  return http.get(`/order/with-user/${peerId}`, { ...options, params })
 }
 
 export function remindBuyer(id) { return http.put(`/order/${id}/remind`) }

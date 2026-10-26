@@ -4,8 +4,8 @@ export function getNotifications(params = {}) {
   return http.get('/notification/page', { params })
 }
 
-export function getNotificationUnreadCount() {
-  return http.get('/notification/unread-count')
+export function getNotificationUnreadCount(options = {}) {
+  return http.get('/notification/unread-count', options)
 }
 
 export function markNotificationRead(id) {

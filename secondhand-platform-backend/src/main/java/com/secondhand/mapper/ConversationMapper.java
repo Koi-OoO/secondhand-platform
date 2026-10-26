@@ -18,6 +18,12 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
      */
     Conversation selectByPair(@Param("user1Id") Long user1Id, @Param("user2Id") Long user2Id);
 
+    /** 原子创建空会话；冲突时保留已有消息摘要，仅补全缺失的关联商品。 */
+    int ensureExists(Conversation conversation);
+
+    /** 原子写入消息摘要；并发提交时只让更大的消息 ID 成为最后一条。 */
+    int upsertAfterMessage(Conversation conversation);
+
     /**
      * 查询「我」的会话摘要，包含空会话。
      */

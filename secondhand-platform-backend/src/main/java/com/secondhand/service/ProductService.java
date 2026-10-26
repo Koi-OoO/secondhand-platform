@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * 商品服务接口
  * 定义商品模块的核心业务能力，包括商品查询、发布、编辑、
- * 上下架、浏览量统计、举报和热门搜索等功能。
+ * 上下架、浏览量统计和热门搜索等功能。
  */
 public interface ProductService {
 
@@ -121,7 +121,7 @@ public interface ProductService {
     void syncViewCounts();
 
     /**
-     * 举报商品
+     * 举报商品兼容入口，当前暂未开放。
      *
      * @param userId 举报人用户 ID
      * @param productId 商品 ID

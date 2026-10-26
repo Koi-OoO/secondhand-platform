@@ -22,31 +22,31 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { useOrderRefresh } from '@/composables/useOrderRefresh'
 import { useRouter } from 'vue-router'
 import { getOrdersWithUser } from '@/api/order'
 import { formatDate, formatPrice } from '@/utils/format'
 import { ORDER_STATUS } from '@/utils/constant'
-import { useMessageStore } from '@/stores/message'
 
 const props = defineProps({ modelValue: Boolean, peerId: Number, peerName: String, currentUserId: Number })
 const emit = defineEmits(['update:modelValue'])
-const router = useRouter(), messageStore = useMessageStore()
+const router = useRouter()
 const orders = ref([]), loading = ref(false), error = ref(''), page = ref(1), total = ref(0)
 const size = 10
 let version = 0
-async function load() {
+async function load(silent = false) {
   const requestVersion = ++version
   if (!props.modelValue || !props.peerId) return
   const peerId = props.peerId
-  loading.value = true
-  error.value = ''
+  const quiet = silent === true
+  if (!quiet) { loading.value = true; error.value = '' }
   try {
-    const result = await getOrdersWithUser(peerId, { page: page.value, size })
+    const result = await getOrdersWithUser(peerId, { page: page.value, size }, { skipErrorMessage: quiet })
     if (requestVersion !== version || peerId !== props.peerId) return
     orders.value = result.records || []
     total.value = Number(result.total || 0)
   } catch {
-    if (requestVersion === version) { orders.value = []; error.value = '订单加载失败，请重试。' }
+    if (requestVersion === version && !quiet) { orders.value = []; error.value = '订单加载失败，请重试。' }
   } finally { if (requestVersion === version) loading.value = false }
 }
 function openOrder(order) {
@@ -58,9 +58,7 @@ watch(() => [props.modelValue, props.peerId, props.currentUserId], () => {
   orders.value = []; total.value = 0; page.value = 1; error.value = ''; loading.value = false
   if (props.modelValue && props.peerId) load()
 }, { immediate: true })
-watch(() => messageStore.latestNotification, item => {
-  if (props.modelValue && item?.type === 'order') { page.value = 1; load() }
-})
+useOrderRefresh(() => load(true), () => props.modelValue)
 </script>
 
 <style scoped lang="scss">

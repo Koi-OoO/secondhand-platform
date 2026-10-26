@@ -69,7 +69,7 @@ public class AuthInterceptor implements Filter {
             return;
         }
         // 全文搜索是公开只读接口；只匹配 GET 本身，不放开未来可能新增的管理子路径。
-        if ("GET".equalsIgnoreCase(httpReq.getMethod()) && "/product/search".equals(uri)) {
+        if ("GET".equalsIgnoreCase(httpReq.getMethod()) && ("/product/search".equals(uri) || "/product/availability".equals(uri))) {
             chain.doFilter(req, res);
             return;
         }

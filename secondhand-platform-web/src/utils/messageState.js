@@ -2,6 +2,17 @@ export function normalizeChatRecords(records = []) {
   return [...records].sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
 }
 
+// 补查响应不能覆盖请求等待期间刚收到的消息；已有消息仍以服务端状态为准。
+export function mergeChatRefresh(reply = [], current = [], baseline = []) {
+  const before = new Set(baseline.map(message => String(message.id)))
+  const merged = new Map(reply.map(message => [String(message.id), message]))
+  for (const message of current) {
+    const key = String(message.id)
+    if (!before.has(key) && !merged.has(key)) merged.set(key, message)
+  }
+  return normalizeChatRecords([...merged.values()])
+}
+
 export function upsertMessage(records = [], message) {
   if (!message || message.id == null) {
     return records

@@ -116,6 +116,7 @@ public class MessageServiceImpl implements MessageService {
      * 创建或获取会话。
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public Result createOrGetConversation(Long userId, Long peerId, Long productId) {
         if (peerId == null) {
             return Result.error("请选择联系人");
@@ -129,23 +130,11 @@ public class MessageServiceImpl implements MessageService {
             return Result.error("联系人不存在");
         }
 
+        // 唯一键配合原子写入处理“打开聊天”和“第一条消息”同时创建会话。
+        Conversation candidate = newConversation(userId, peerId, productId, new Date());
+        conversationMapper.ensureExists(candidate);
         Conversation conversation = findConversation(userId, peerId);
-        if (conversation == null) {
-            conversation = new Conversation();
-            UserPair pair = normalizePair(userId, peerId);
-            Date now = new Date();
-            conversation.setUser1Id(pair.user1Id);
-            conversation.setUser2Id(pair.user2Id);
-            conversation.setProductId(productId);
-            conversation.setLastTime(now);
-            conversation.setCreateTime(now);
-            conversation.setUpdateTime(now);
-            conversationMapper.insert(conversation);
-        } else if (conversation.getProductId() == null && productId != null) {
-            conversation.setProductId(productId);
-            conversation.setUpdateTime(new Date());
-            conversationMapper.updateById(conversation);
-        }
+        if (conversation == null) throw new IllegalStateException("会话创建后未能读取");
 
         return Result.success(toConversationItem(conversation, peer, null, 0));
     }
@@ -260,29 +249,22 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void upsertConversationAfterMessage(Long fromUserId, Long toUserId, Long productId, Message message) {
-        Conversation conversation = findConversation(fromUserId, toUserId);
-        if (conversation == null) {
-            conversation = new Conversation();
-            UserPair pair = normalizePair(fromUserId, toUserId);
-            Date now = new Date();
-            conversation.setUser1Id(pair.user1Id);
-            conversation.setUser2Id(pair.user2Id);
-            conversation.setProductId(productId);
-            conversation.setLastMessageId(message.getId());
-            conversation.setLastTime(message.getCreateTime());
-            conversation.setCreateTime(now);
-            conversation.setUpdateTime(now);
-            conversationMapper.insert(conversation);
-            return;
-        }
-
+        Conversation conversation = newConversation(fromUserId, toUserId, productId, message.getCreateTime());
         conversation.setLastMessageId(message.getId());
-        conversation.setLastTime(message.getCreateTime());
-        conversation.setUpdateTime(new Date());
-        if (conversation.getProductId() == null && productId != null) {
-            conversation.setProductId(productId);
-        }
-        conversationMapper.updateById(conversation);
+        conversationMapper.upsertAfterMessage(conversation);
+    }
+
+    private Conversation newConversation(Long userId, Long peerId, Long productId, Date lastTime) {
+        UserPair pair = normalizePair(userId, peerId);
+        Date now = new Date();
+        Conversation conversation = new Conversation();
+        conversation.setUser1Id(pair.user1Id);
+        conversation.setUser2Id(pair.user2Id);
+        conversation.setProductId(productId);
+        conversation.setLastTime(lastTime);
+        conversation.setCreateTime(now);
+        conversation.setUpdateTime(now);
+        return conversation;
     }
 
     private Conversation findConversation(Long userId, Long peerId) {

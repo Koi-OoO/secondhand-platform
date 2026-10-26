@@ -34,18 +34,21 @@ const statusText = computed(() => {
   return { pending: '待买家确认', confirmed: '已确认', declined: '未同意', expired: '已失效' }[p.effectiveStatus] || '已失效'
 })
 let version = 0
-async function load() {
+async function load(silent = false) {
   const current = ++version
-  loading.value = true; error.value = ''
-  try { const data = await getMeetupProposal(props.proposalId); if (current === version) proposal.value = data }
-  catch { if (current === version) { error.value = '卡片加载失败，请刷新后操作'; proposal.value = null } }
+  const quiet = silent === true
+  if (!quiet) { loading.value = true; error.value = '' }
+  try { const data = await getMeetupProposal(props.proposalId, { skipErrorMessage: quiet }); if (current === version) proposal.value = data }
+  catch { if (current === version && !quiet) { error.value = '卡片加载失败，请刷新后操作'; proposal.value = null } }
   finally { if (current === version) loading.value = false }
 }
 watch(() => [props.proposalId, props.initial], () => {
   version++; proposal.value = props.initial || null
   if (!props.initial?.effectiveStatus) load()
 }, { immediate: true })
-watch(() => messageStore.latestNotification, n => { if (n?.type === 'order' && n.relatedId === proposal.value?.orderId) load() })
+watch(() => messageStore.latestNotification, n => {
+  if (n?.type === 'order' && String(n.relatedId) === String(proposal.value?.orderId) && !acting.value) load(true)
+})
 watch(() => messageStore.latestChatMessage, m => { if (m?.meetupProposal?.orderId === proposal.value?.orderId) load() })
 async function respond(accept) {
   if (acting.value || !canRespond.value) return

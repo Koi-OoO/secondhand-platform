@@ -83,6 +83,7 @@ class RealOrderFlowIntegrationTest {
   }
   @Bean NotificationService notificationService(){return mock(NotificationService.class);}
   @Bean ChatWebSocketHandler chatWebSocketHandler(){return mock(ChatWebSocketHandler.class);}
+  @Bean com.secondhand.websocket.ProductChangePublisher productChangePublisher(){return mock(com.secondhand.websocket.ProductChangePublisher.class);}
  }
  @Autowired OrderService orders;
  @Autowired MeetupProposalService appointments;

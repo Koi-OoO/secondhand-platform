@@ -20,6 +20,9 @@ public interface NotificationService {
      */
     void notifyUser(Long userId, String type, String title, String content, Long relatedId);
 
+    /** 创建收藏通知，仅记录收藏者公开的 ID、昵称和头像。 */
+    void notifyFavorite(Long sellerId, Long collectorId, Long productId, String productTitle);
+
     /**
      * 分页查询我的通知（按时间倒序）。
      */

@@ -49,6 +49,7 @@ class ProductServiceImplTest {
     private RedissonClient redissonClient;
     private CacheUtil cacheUtil;
     private ProductServiceImpl service;
+    private com.secondhand.websocket.ProductChangePublisher productChanges;
 
     @BeforeEach
     void setUp() {
@@ -65,6 +66,16 @@ class ProductServiceImplTest {
         ReflectionTestUtils.setField(service, "redisTemplate", redisTemplate);
         ReflectionTestUtils.setField(service, "redissonClient", redissonClient);
         ReflectionTestUtils.setField(service, "cacheUtil", cacheUtil);
+        productChanges = mock(com.secondhand.websocket.ProductChangePublisher.class);
+        ReflectionTestUtils.setField(service, "productChanges", productChanges);
+    }
+
+    @Test
+    void reportingIsUnavailableWithoutPretendingToAcceptOrWritingDedupKeys() {
+        Result result = service.reportProduct(7L, 40L, "虚假信息", "测试说明");
+        assertThat(result.getCode()).isEqualTo(500);
+        assertThat(result.getMessage()).isEqualTo("举报功能暂未开放");
+        verifyNoInteractions(productMapper, redisTemplate, cacheUtil);
     }
 
     @Test
@@ -177,6 +188,7 @@ class ProductServiceImplTest {
         edit.setPrice(new BigDecimal("99.00"));
 
         assertThat(service.update(7L, edit).getCode()).isEqualTo(200);
+        verify(productChanges).publish(40L);
         // 旧商品保留大类时无需重新判断叶子，避免补分类后无法编辑。
         verify(categoryMapper, never()).selectByParentId(3);
         Product partialEdit = new Product();

@@ -18,16 +18,27 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 收藏服务实现类
  */
 @Service  // 标识为Service层组件
 public class FavoriteServiceImpl implements FavoriteService {
+    private static final Logger log = LoggerFactory.getLogger(FavoriteServiceImpl.class);
+    private static final DefaultRedisScript<Long> RELEASE_NOTIFICATION_MARKER = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", Long.class);
 
     @Autowired  // 注入收藏Mapper
     private FavoriteMapper favoriteMapper;
@@ -37,6 +48,8 @@ public class FavoriteServiceImpl implements FavoriteService {
     private ProductImageMapper productImageMapper;
     @Autowired  // 注入通知服务（商品被收藏时通知卖家）
     private NotificationService notificationService;
+    @Autowired
+    private StringRedisTemplate notificationRedis;
 
     /**
      * 添加收藏
@@ -75,10 +88,38 @@ public class FavoriteServiceImpl implements FavoriteService {
 
         // 通知卖家：商品被收藏（收藏自己商品时不通知）
         if (!product.getSellerId().equals(userId)) {
-            notificationService.notifyUser(product.getSellerId(), "favorite", "有人收藏了你的商品",
-                    "您的商品「" + product.getTitle() + "」被收藏了", productId);
+            notifySellerIfNeeded(userId, product);
         }
         return Result.success("收藏成功");
+    }
+
+    private void notifySellerIfNeeded(Long userId, Product product) {
+        String key = "notification:favorite:" + userId + ":" + product.getId();
+        String token = UUID.randomUUID().toString();
+        try {
+            // 原子占位：取消收藏不清除该标记，反复收藏也不会重复提醒。
+            if (!Boolean.TRUE.equals(notificationRedis.opsForValue()
+                    .setIfAbsent(key, token, 24, TimeUnit.HOURS))) return;
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status != STATUS_ROLLED_BACK) return;
+                        try {
+                            // 收藏未提交时释放本次标记；比较令牌，避免删掉其他请求的标记。
+                            notificationRedis.execute(RELEASE_NOTIFICATION_MARKER, Collections.singletonList(key), token);
+                        } catch (RuntimeException ex) {
+                            log.warn("收藏通知回滚标记清理失败，等待自动过期：productId={}", product.getId(), ex);
+                        }
+                    }
+                });
+            }
+            notificationService.notifyFavorite(product.getSellerId(), userId, product.getId(), product.getTitle());
+        } catch (RuntimeException ex) {
+            // 通知属于附属功能，Redis 异常时不影响收藏和收藏数更新。
+            log.warn("收藏通知暂未发送：productId={}", product.getId(), ex);
+        }
     }
 
     /**

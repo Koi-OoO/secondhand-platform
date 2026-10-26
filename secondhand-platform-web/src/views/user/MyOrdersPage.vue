@@ -226,6 +226,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useOrderRefresh } from '@/composables/useOrderRefresh'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -353,20 +354,27 @@ function toggleSelect(orderId, checked) {
   }
 }
 
-async function fetchData() {
-  loading.value = true
+let fetchVersion = 0
+useOrderRefresh(() => fetchData(true), () => true, () => !!actingId.value || batchDeliverLoading.value || evalLoading.value)
+
+async function fetchData(silent = false) {
+  const quiet = silent === true, version = ++fetchVersion
+  const currentTab = tab.value, currentPage = page.value
+  if (!quiet) loading.value = true
   try {
     const fetcher = tab.value === 'bought' ? getBoughtOrders : getSoldOrders
-    const data = await fetcher({ page: page.value, size: size.value })
+    const data = await fetcher({ page: page.value, size: size.value }, { skipErrorMessage: quiet })
+    if (version !== fetchVersion || currentTab !== tab.value || currentPage !== page.value) return
     list.value = data.records || []
     total.value = data.total || 0
     pruneSelection()
   } catch {
+    if (quiet || version !== fetchVersion) return
     list.value = []
     total.value = 0
     selectedIds.clear()
   } finally {
-    loading.value = false
+    if (version === fetchVersion) loading.value = false
   }
 }
 
