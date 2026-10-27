@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:realtime": "node --test tests/realtimeRefresh.test.mjs",
     "test:layout": "node --test tests/messageLayout.test.mjs",
+    "test:navigation": "node --test tests/firstNavigation.test.mjs",
     "test:unit": "node --test src/utils/productChannel.test.mjs src/utils/meetupProposal.test.mjs src/utils/orderDetail.test.mjs src/utils/notification.test.mjs src/utils/format.test.mjs src/utils/messageState.test.mjs src/utils/ai.test.mjs src/utils/aiChatSession.test.mjs src/utils/productFilters.test.mjs src/utils/aiApi.test.mjs src/utils/categoryTree.test.mjs src/utils/recentAccounts.test.mjs src/utils/accountSwitch.test.mjs src/utils/requestIdentity.test.mjs src/utils/accountApi.test.mjs src/utils/orderApi.test.mjs",
     "test:proxy": "node --test tests/devProxy.test.mjs"
   },

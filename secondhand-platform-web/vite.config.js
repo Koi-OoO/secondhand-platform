@@ -1,10 +1,16 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import { existsSync, readdirSync } from 'node:fs'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import viteCompression from 'vite-plugin-compression'
+
+const componentDirectory = resolve(__dirname, 'node_modules/element-plus/es/components')
+const componentStyles = readdirSync(componentDirectory)
+  .filter(name => existsSync(resolve(componentDirectory, name, 'style/css.mjs')))
+  .map(name => `element-plus/es/components/${name}/style/css`)
 
 export default defineConfig({
   plugins: [
@@ -19,6 +25,11 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src')
     }
+  },
+  // 按需插件在转换 Vue 文件时才添加组件样式，启动扫描可能漏掉懒加载页面的依赖。
+  // 提前预构建这些入口，避免第一次导航时重新优化依赖、整页刷新并打断路由跳转。
+  optimizeDeps: {
+    include: ['element-plus/es', ...componentStyles]
   },
   css: {
     preprocessorOptions: {
@@ -37,6 +48,8 @@ export default defineConfig({
     }
   },
   server: {
+    // 固定本机 IPv4 地址，避免 localhost 只监听 ::1 时无法通过 127.0.0.1 访问。
+    host: '127.0.0.1',
     port: 5173,
     proxy: {
       '/api': {
