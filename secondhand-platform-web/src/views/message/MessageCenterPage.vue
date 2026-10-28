@@ -232,9 +232,11 @@ watch(
     }
     const peerId = getPeerIdFromMessage(message, currentUserId.value)
     if (peerId && peerId === selectedPeerId.value) {
+      // 只有用户原本就在底部时才跟随新消息；翻看旧记录时不强行拉回底部。
+      const shouldFollow = isNearBottom()
       messages.value = upsertMessage(messages.value, message)
       if (!notificationTab.value) await markActiveConversationRead()
-      scrollToBottom()
+      if (shouldFollow) scrollToBottom()
     }
   }
 )
@@ -364,12 +366,17 @@ async function loadChat(peerId, options = {}) {
     ])
     await refreshVisibleOnlineStatus()
     if (version !== chatLoadVersion) return
+
+    // 先撤掉骨架屏，让真正的消息列表参与布局，再计算滚动位置。
+    if (!options.silent) chatLoading.value = false
     if (options.preservePosition && !atBottom) {
       await nextTick()
       if (chatBody.value && version === chatLoadVersion) chatBody.value.scrollTop = top
-    } else scrollToBottom()
+    } else {
+      await scrollToBottom()
+    }
   } finally {
-    if (version === chatLoadVersion) chatLoading.value = false
+    if (version === chatLoadVersion && chatLoading.value) chatLoading.value = false
   }
 }
 
@@ -377,7 +384,8 @@ async function markActiveConversationRead() {
   if (!selectedPeerId.value) {
     return
   }
-  await loadChat(selectedPeerId.value, { silent: true })
+  // 标记已读会刷新列表和消息，保留用户当前阅读位置，避免每来一条消息就跳到底部。
+  await loadChat(selectedPeerId.value, { silent: true, preservePosition: true })
 }
 
 async function sendCurrentMessage() {
@@ -437,10 +445,21 @@ async function refreshVisibleOnlineStatus() {
   await messageStore.refreshOnlineStatus(ids)
 }
 
+function isNearBottom() {
+  const body = chatBody.value
+  if (!body) return true
+  return body.scrollHeight - body.clientHeight - body.scrollTop < 60
+}
+
 async function scrollToBottom() {
   await nextTick()
-  if (chatBody.value) {
-    chatBody.value.scrollTop = chatBody.value.scrollHeight
+  if (!chatBody.value) return
+  chatBody.value.scrollTop = chatBody.value.scrollHeight
+  // 等下一帧再校准一次，兼容预约卡片或图片撑高消息列表的情况。
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight
+    })
   }
 }
 </script>

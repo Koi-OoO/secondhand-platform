@@ -129,6 +129,7 @@ import { useMessageStore } from '@/stores/message'
 import { Search, Plus, ArrowDown, User, Star, Document, SwitchButton, Switch, Shop, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getPendingCount } from '@/api/order'
+import { useOrderRefresh } from '@/composables/useOrderRefresh'
 import AccountManagerDialog from './AccountManagerDialog.vue'
 
 const router = useRouter()
@@ -141,7 +142,7 @@ const accountManagerVisible = ref(false)
 const pendingCount = ref({ toAccept: 0, toShip: 0, toConfirm: 0 })
 const lastToShip = ref(null)
 const lastToConfirm = ref(null)
-let pendingTimer = null
+let pendingVersion = 0
 
 const tickerItems = [
   '今日新上 128 件好物',
@@ -171,13 +172,10 @@ function onScroll() {
 }
 onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
-  pollPendingCount()
-  pendingTimer = setInterval(pollPendingCount, 30_000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onScroll)
-  clearInterval(pendingTimer)
 })
 
 async function handleCommand(cmd) {
@@ -218,7 +216,18 @@ function clearHeaderSearch() {
   }
 }
 
+// 自己操作订单、收到对方订单通知、重连和回到页面时刷新；30秒轮询只作兜底。
+useOrderRefresh(pollPendingCount, () => userStore.isLoggedIn)
+watch(() => userStore.userInfo?.id, () => {
+  pendingCount.value = { toAccept: 0, toShip: 0, toConfirm: 0 }
+  lastToShip.value = null
+  lastToConfirm.value = null
+  pollPendingCount()
+}, { immediate: true })
+
 async function pollPendingCount() {
+  const version = ++pendingVersion
+  const userId = userStore.userInfo?.id
   if (!userStore.isLoggedIn) {
     pendingCount.value = { toAccept: 0, toShip: 0, toConfirm: 0 }
     lastToShip.value = null
@@ -228,6 +237,8 @@ async function pollPendingCount() {
 
   try {
     const data = await getPendingCount()
+    // 切换账号或新查询已发起时，丢弃旧请求，避免顶部显示上一份统计。
+    if (version !== pendingVersion || userId !== userStore.userInfo?.id) return
     const toShip = Number(data?.toShip || 0)
     const toConfirm = Number(data?.toConfirm || 0)
     pendingCount.value = {

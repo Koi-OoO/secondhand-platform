@@ -27,7 +27,16 @@ http.interceptors.request.use(
 http.interceptors.response.use(
   response => {
     const { code, message, data } = response.data
-    if (code === 200) return data
+    if (code === 200) {
+      // 当前账号操作订单成功后，通知顶部提示和已打开的订单页面补查最新数据。
+      const config = response.config
+      if (/^\/order(?:\/|$)/.test(config?.url || '')
+          && ['post', 'put', 'patch', 'delete'].includes(config?.method)
+          && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event('order-changed'))
+      }
+      return data
+    }
     if (!response.config?.skipErrorMessage) {
       ElMessage.error(message || '操作失败')
     }

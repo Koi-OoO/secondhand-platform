@@ -13,14 +13,17 @@ export function useOrderRefresh(refresh, matches = () => true, blocked = () => f
   watch(() => messages.latestNotification, n => { if (n?.type === 'order' && matches(n)) queue.request() })
   watch(() => messages.connected, connected => { if (connected) queue.request() })
   watch(blocked, busy => { if (!busy && deferred) { deferred = false; queue.request() } })
+  const localChange = () => queue.request()
   const resume = () => { if (document.visibilityState !== 'hidden') queue.request() }
   onMounted(() => {
+    window.addEventListener('order-changed', localChange)
     window.addEventListener('focus', resume); document.addEventListener('visibilitychange', resume)
     if (fallbackMs) fallback = window.setInterval(resume, fallbackMs)
   })
   onUnmounted(() => {
     alive = false; queue.stop()
     if (fallback !== null) window.clearInterval(fallback)
+    window.removeEventListener('order-changed', localChange)
     window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume)
   })
 }
