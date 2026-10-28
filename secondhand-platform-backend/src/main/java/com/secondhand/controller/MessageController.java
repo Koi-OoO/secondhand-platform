@@ -45,12 +45,13 @@ public class MessageController {
                        @Parameter(description = "关联商品ID，可选；从商品详情发起聊天时传入", example = "100")
                        @RequestParam(required = false) Long productId,  // 关联商品ID，可选
                        @Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service发送
+
+        // 2. 调用业务层，发送私信
         return messageService.send(userId, toUserId, content, productId);
     }
 
@@ -61,12 +62,13 @@ public class MessageController {
     @Operation(summary = "我的会话列表",
             description = "需要登录，返回当前用户所有私信会话；包含尚未发送消息的空会话。Result.data 每项包含 conversationId、peerId、peerNickname、peerAvatar、productId、lastContent、lastTime、unreadCount")
     public Result conversations(@Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询会话列表
+
+        // 2. 调用业务层，查询会话列表
         return messageService.getConversations(userId);
     }
 
@@ -81,10 +83,13 @@ public class MessageController {
                                      @Parameter(description = "关联商品ID，可选；从商品详情联系卖家时传入", example = "100")
                                      @RequestParam(required = false) Long productId,  // 关联商品ID，可选
                                      @Parameter(hidden = true) HttpSession session) {  // 当前会话
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
+
+        // 2. 调用业务层，创建或获取会话
         return messageService.createOrGetConversation(userId, peerId, productId);
     }
 
@@ -101,12 +106,13 @@ public class MessageController {
                        @Parameter(description = "每页条数", example = "20")
                        @RequestParam(defaultValue = "20") Integer size,  // 每页条数，默认20
                        @Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询聊天记录
+
+        // 2. 调用业务层，分页查询聊天记录并标记已读
         return messageService.getChat(userId, peerId, page, size);
     }
 
@@ -116,12 +122,13 @@ public class MessageController {
     @GetMapping("/unread-count")  // GET /message/unread-count
     @Operation(summary = "私信未读数", description = "需要登录，返回当前用户收到的未读私信总数")
     public Result unreadCount(@Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询未读数
+
+        // 2. 调用业务层，查询未读私信总数
         return messageService.getUnreadCount(userId);
     }
 
@@ -134,10 +141,13 @@ public class MessageController {
     public Result onlineStatus(@Parameter(description = "用户ID列表，支持逗号分隔传参，如 userIds=2,3,4", example = "2,3,4", required = true)
                                @RequestParam List<Long> userIds,
                                @Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
+
+        // 2. 调用业务层，批量查询在线状态
         return messageService.getOnlineStatus(userIds);
     }
 }

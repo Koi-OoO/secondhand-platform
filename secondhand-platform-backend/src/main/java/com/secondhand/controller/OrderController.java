@@ -38,23 +38,39 @@ public class OrderController {
     private OrderService orderService;
 
     @PutMapping("/{id}/remind")
-    public Result remind(@PathVariable Long id,HttpSession session) {
-        Long user=SessionUtil.getUserId(session);
-        if(user==null) return Result.error("未登录");
-        return orderService.remindBuyer(user,id);
+    public Result remind(@PathVariable Long id, HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
+        Long userId = SessionUtil.getUserId(session);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，提醒买家核实收货
+        return orderService.remindBuyer(userId, id);
     }
+
     @PutMapping("/{id}/delivery-issue")
-    public Result issue(@PathVariable Long id,@RequestParam String issue,HttpSession session) {
-        Long user=SessionUtil.getUserId(session);
-        if(user==null) return Result.error("未登录");
-        return orderService.reportDeliveryIssue(user,id,issue);
+    public Result issue(@PathVariable Long id, @RequestParam String issue, HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
+        Long userId = SessionUtil.getUserId(session);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，反馈交付问题
+        return orderService.reportDeliveryIssue(userId, id, issue);
     }
 
     @PutMapping("/{id}/accept")
     @Operation(summary = "卖家接单", description = "待接单进入待面交，通知买家协商面交时间")
     public Result accept(@PathVariable Long id, HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long sellerId = SessionUtil.getUserId(session);
-        if (sellerId == null) return Result.error("未登录");
+        if (sellerId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，卖家接单
         return orderService.acceptOrder(sellerId, id);
     }
 
@@ -64,16 +80,26 @@ public class OrderController {
                            @RequestParam(defaultValue = "1") Integer page,
                            @RequestParam(defaultValue = "10") Integer size,
                            HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        if (userId == null) return Result.error("未登录");
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，查询与聊天对象的订单
         return orderService.getOrdersWithUser(userId, peerId, page, size);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "查看关联订单", description = "仅订单买卖双方可查看")
     public Result detail(@PathVariable Long id, HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        if (userId == null) return Result.error("未登录");
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，查询订单详情
         return orderService.getOrderDetail(userId, id);
     }
 
@@ -89,13 +115,15 @@ public class OrderController {
                          @Parameter(description = "买家确认的商品面交地点，用于核对是否变更", example = "东区食堂门口", required = true)
                          @RequestParam String address,  // 面交地点
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 从session获取用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service创建订单
+
+        // 2. 调用业务层，创建订单
         return orderService.createOrder(userId, productId, quantity, address);
     }
 
@@ -109,13 +137,14 @@ public class OrderController {
                          @Parameter(description = "每页条数", example = "12")
                          @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
                          @Parameter(hidden = true) HttpSession session) {
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询买家订单
+
+        // 2. 调用业务层，查询买家订单
         return orderService.getMyBoughtOrders(userId, page, size);
     }
 
@@ -129,13 +158,14 @@ public class OrderController {
                        @Parameter(description = "每页条数", example = "12")
                        @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
                        @Parameter(hidden = true) HttpSession session) {
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询卖家订单
+
+        // 2. 调用业务层，查询卖家订单
         return orderService.getMySoldOrders(userId, page, size);
     }
 
@@ -147,13 +177,14 @@ public class OrderController {
     public Result hideBought(@Parameter(description = "订单ID", example = "1", required = true)
                              @PathVariable Long id,  // 订单ID，从路径获取
                              @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 隐藏买家订单
+
+        // 2. 调用业务层，隐藏买家订单记录
         return orderService.hideBoughtOrder(userId, id);
     }
 
@@ -168,13 +199,14 @@ public class OrderController {
                                       content = @Content(schema = @Schema(implementation = OrderBatchIdsRequest.class)))
                                   @RequestBody OrderBatchIdsRequest request,  // 请求体，包含订单ID列表
                                   @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 批量隐藏
+
+        // 2. 调用业务层，批量隐藏买家订单记录
         return orderService.batchHideBoughtOrders(userId, request != null ? request.getOrderIds() : null);
     }
 
@@ -186,13 +218,14 @@ public class OrderController {
     public Result hideSold(@Parameter(description = "订单ID", example = "1", required = true)
                            @PathVariable Long id,  // 订单ID
                            @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 隐藏卖家订单
+
+        // 2. 调用业务层，隐藏卖家订单记录
         return orderService.hideSoldOrder(userId, id);
     }
 
@@ -207,47 +240,50 @@ public class OrderController {
                                     content = @Content(schema = @Schema(implementation = OrderBatchIdsRequest.class)))
                                 @RequestBody OrderBatchIdsRequest request,  // 请求体，包含订单ID列表
                                 @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 批量隐藏
+
+        // 2. 调用业务层，批量隐藏卖家订单记录
         return orderService.batchHideSoldOrders(userId, request != null ? request.getOrderIds() : null);
     }
 
     /**
-     * 查询待处理订单数量（待交付+待确认）
+     * 查询待处理订单数量（待接单、待面交、待确认）
      */
     @GetMapping("/pending-count")  // GET请求，路径 /order/pending-count
     @Operation(summary = "查询待处理订单数", description = "需要登录，返回待接单、待面交和待确认订单数量")
     public Result pendingCount(@Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询待处理数量
+
+        // 2. 调用业务层，查询待处理订单数量
         return orderService.getPendingCount(userId);
     }
 
     /**
-     * 买家取消订单（仅待交付状态可取消）
+     * 买家取消订单（待接单或待面交状态可取消）
      */
     @PutMapping("/{id}/cancel")  // PUT请求，路径 /order/{id}/cancel
     @Operation(summary = "取消订单", description = "需要登录，买家可取消待接单或待面交订单，并回补商品库存")
     public Result cancel(@Parameter(description = "订单ID", example = "1", required = true)
                          @PathVariable Long id,  // 订单ID
                          @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 取消订单
+
+        // 2. 调用业务层，取消订单
         return orderService.cancelOrder(userId, id);
     }
 
@@ -261,13 +297,14 @@ public class OrderController {
                        @Parameter(description = "旧接口兼容字段，面交不使用")
                        @RequestParam(required = false) String expressNo,
                        @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 交付
+
+        // 2. 调用业务层，声明面交已交付
         return orderService.shipOrder(userId, id, expressNo);
     }
 
@@ -282,13 +319,14 @@ public class OrderController {
                                 content = @Content(schema = @Schema(implementation = OrderBatchShipRequest.class)))
                             @RequestBody OrderBatchShipRequest request,  // 请求体，包含订单ID列表
                             @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 批量交付
+
+        // 2. 调用业务层，批量声明面交已交付
         return orderService.batchShipOrders(userId, request != null ? request.getItems() : null);
     }
 
@@ -302,13 +340,14 @@ public class OrderController {
                          @Parameter(description = "拒绝原因，可选", example = "商品已损坏")
                          @RequestParam(required = false) String reason,  // 拒绝原因，可选
                          @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 拒绝交付
+
+        // 2. 调用业务层，拒绝接单或取消交易
         return orderService.rejectOrder(userId, id, reason);
     }
 
@@ -323,13 +362,14 @@ public class OrderController {
                                   content = @Content(schema = @Schema(implementation = OrderBatchRejectRequest.class)))
                               @RequestBody OrderBatchRejectRequest request,  // 请求体，包含订单ID列表和拒绝原因
                               @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 批量拒绝
+
+        // 2. 调用业务层，批量拒绝接单或取消交易
         return orderService.batchRejectOrders(userId,
                 request != null ? request.getOrderIds() : null,
                 request != null ? request.getReason() : null);
@@ -343,13 +383,14 @@ public class OrderController {
     public Result confirm(@Parameter(description = "订单ID", example = "1", required = true)
                           @PathVariable Long id,  // 订单ID
                           @Parameter(hidden = true) HttpSession session) {
-        // 获取当前用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 确认收到
+
+        // 2. 调用业务层，买家确认交易完成
         return orderService.confirmOrder(userId, id);
     }
 }

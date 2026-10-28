@@ -23,10 +23,10 @@ class MeetupProposalServiceTest {
     @BeforeEach void setup() {
         orders=mock(OrderMapper.class); proposals=mock(MeetupProposalMapper.class);
         notifications=mock(NotificationService.class); service=new MeetupProposalService();
-        ReflectionTestUtils.setField(service,"orders",orders);
-        ReflectionTestUtils.setField(service,"proposals",proposals);
-        ReflectionTestUtils.setField(service,"notifications",notifications);
-        ReflectionTestUtils.setField(service,"messages",mock(MessageService.class));
+        ReflectionTestUtils.setField(service,"orderMapper",orders);
+        ReflectionTestUtils.setField(service,"meetupProposalMapper",proposals);
+        ReflectionTestUtils.setField(service,"notificationService",notifications);
+        ReflectionTestUtils.setField(service,"messageService",mock(MessageService.class));
         order=new Order();order.setId(10L);order.setSellerId(30L);order.setBuyerId(20L);order.setStatus(1);
         order.setMeetupTime(new Date(System.currentTimeMillis()+100000));
         when(orders.selectOne(any())).thenReturn(order);

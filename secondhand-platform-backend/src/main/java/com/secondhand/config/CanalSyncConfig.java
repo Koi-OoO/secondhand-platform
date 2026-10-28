@@ -1,8 +1,17 @@
 package com.secondhand.config;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import com.secondhand.mapper.*;
-import com.secondhand.search.*;
+import com.secondhand.mapper.CategoryMapper;
+import com.secondhand.mapper.ProductImageMapper;
+import com.secondhand.mapper.ProductMapper;
+import com.secondhand.search.CanalBatchProcessor;
+import com.secondhand.search.CanalChangeDecoder;
+import com.secondhand.search.CanalSyncProperties;
+import com.secondhand.search.CanalSyncWorker;
+import com.secondhand.search.ElasticsearchProperties;
+import com.secondhand.search.ProductSearchDocumentFactory;
+import com.secondhand.search.ProductSearchIndexInitializer;
+import com.secondhand.search.ProductSearchSyncWriter;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -15,20 +24,33 @@ import org.springframework.core.annotation.Order;
 @ConditionalOnProperty(prefix = "app.search.canal", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties({CanalSyncProperties.class, ElasticsearchProperties.class})
 public class CanalSyncConfig {
-    public CanalSyncConfig(CanalSyncProperties properties, ElasticsearchProperties es) { properties.validate(es); }
 
-    @Bean public ProductSearchSyncWriter productSearchSyncWriter(ElasticsearchClient client, ElasticsearchProperties es,
-            ProductMapper products, ProductImageMapper images, CategoryMapper categories, ProductSearchDocumentFactory factory) {
-        return new ProductSearchSyncWriter(client, es, products, images, categories, factory);
+    public CanalSyncConfig(CanalSyncProperties properties, ElasticsearchProperties elasticsearchProperties) {
+        properties.validate(elasticsearchProperties);
     }
 
-    @Bean public CanalSyncWorker canalSyncWorker(CanalSyncProperties properties, ProductSearchSyncWriter writer) {
-        return new CanalSyncWorker(properties, new CanalBatchProcessor(
-                new CanalChangeDecoder(properties.getSchema()), writer, properties.getBatchSize()));
+    @Bean
+    public ProductSearchSyncWriter productSearchSyncWriter(ElasticsearchClient client,
+            ElasticsearchProperties properties, ProductMapper productMapper, ProductImageMapper productImageMapper,
+            CategoryMapper categoryMapper, ProductSearchDocumentFactory documentFactory) {
+        return new ProductSearchSyncWriter(client, properties, productMapper, productImageMapper,
+                categoryMapper, documentFactory);
     }
 
-    @Bean @Order(30)
+    @Bean
+    public CanalSyncWorker canalSyncWorker(CanalSyncProperties properties, ProductSearchSyncWriter syncWriter) {
+        CanalBatchProcessor batchProcessor = new CanalBatchProcessor(
+                new CanalChangeDecoder(properties.getSchema()), syncWriter, properties.getBatchSize());
+        return new CanalSyncWorker(properties, batchProcessor);
+    }
+
+    @Bean
+    @Order(30)
     public ApplicationRunner canalSyncRunner(CanalSyncWorker worker, ProductSearchIndexInitializer initializer) {
-        return args -> { initializer.initialize(); worker.start(); };
+        return args -> {
+            // 先校验索引，再启动 Canal 消费，避免写入不存在的索引
+            initializer.initialize();
+            worker.start();
+        };
     }
 }

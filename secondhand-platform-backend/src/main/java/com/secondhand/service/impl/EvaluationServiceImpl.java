@@ -14,12 +14,13 @@ import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
 import com.secondhand.mapper.UserMapper;
 import com.secondhand.service.EvaluationService;
+import com.secondhand.service.NotificationService;
 import com.secondhand.util.Result;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,7 @@ public class EvaluationServiceImpl implements EvaluationService {
     @Autowired  // 注入用户Mapper
     private UserMapper userMapper;
     @Autowired
-    private com.secondhand.service.NotificationService notificationService;
+    private NotificationService notificationService;
 
     /**
      * 提交订单评价
@@ -50,17 +51,16 @@ public class EvaluationServiceImpl implements EvaluationService {
     @Override
     @Transactional  // 开启事务，保证数据一致性
     public Result evaluate(Long fromUserId, Long orderId, Integer rating, String content, Boolean anonymous) {
-        // 校验评分范围：1-5分
+        // 1. 校验评分范围和评价内容长度
         if (rating == null || rating < 1 || rating > 5) {
             return Result.error("评分需在 1 到 5 之间");
         }
-
         if (content != null && content.length() > 500) {
             return Result.error("评价内容不能超过500字");
         }
-        // 查询订单
+
+        // 2. 查询订单，确认订单已完成且当前用户是买家
         Order order = orderMapper.selectById(orderId);
-        // 订单不存在
         if (order == null) {
             return Result.error("订单不存在");
         }
@@ -73,7 +73,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             return Result.error("仅买家可评价");
         }
 
-        // 检查是否已评价过该订单
+        // 3. 同一买家不能重复评价同一订单
         LambdaQueryWrapper<Evaluation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Evaluation::getOrderId, orderId)
                 .eq(Evaluation::getFromUserId, fromUserId);
@@ -81,19 +81,22 @@ public class EvaluationServiceImpl implements EvaluationService {
             return Result.error("您已评价过该订单");
         }
 
-        // 创建评价记录
-        Evaluation ev = new Evaluation();
-        ev.setOrderId(orderId);  // 订单ID
-        ev.setFromUserId(fromUserId);  // 评价人ID（买家）
-        ev.setToUserId(order.getSellerId());  // 被评价人ID（卖家）
-        ev.setRating(rating);  // 评分
-        ev.setContent(content);  // 评价内容
-        ev.setAnonymous(Boolean.TRUE.equals(anonymous));  // 是否匿名
-        ev.setCreateTime(new Date());  // 创建时间
-        evaluationMapper.insert(ev);  // 插入数据库
+        // 4. 保存评价记录
+        Evaluation evaluation = new Evaluation();
+        evaluation.setOrderId(orderId);  // 订单ID
+        evaluation.setFromUserId(fromUserId);  // 评价人ID（买家）
+        evaluation.setToUserId(order.getSellerId());  // 被评价人ID（卖家）
+        evaluation.setRating(rating);  // 评分
+        evaluation.setContent(content);  // 评价内容
+        evaluation.setAnonymous(Boolean.TRUE.equals(anonymous));  // 是否匿名
+        evaluation.setCreateTime(new Date());  // 创建时间
+        evaluationMapper.insert(evaluation);  // 插入数据库
 
+        // 5. 通知卖家收到新评价
         notificationService.notifyUser(order.getSellerId(), "order", "收到新评价",
                 "买家已评价订单，请查看评价详情", orderId);
+
+        // 6. 返回评价结果
         return Result.success("评价成功");
     }
 
@@ -102,113 +105,142 @@ public class EvaluationServiceImpl implements EvaluationService {
      */
     @Override
     public Result getUserEvaluations(Long userId, Integer page, Integer size) {
-        // 页码校验，默认1
+        // 1. 规范页码和每页条数
         if (page == null || page < 1) {
             page = 1;
         }
-        // 每页条数校验，默认12
         if (size == null || size < 1) {
             size = 12;
         }
 
-        // 构建查询条件：被评价人=userId，按创建时间倒序
+        // 2. 按被评价人筛选，按创建时间倒序分页查询
         LambdaQueryWrapper<Evaluation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Evaluation::getToUserId, userId)
                 .orderByDesc(Evaluation::getCreateTime);
 
-        // 分页查询
-        Page<Evaluation> pageObj = new Page<>(page, size);
-        IPage<Evaluation> result = evaluationMapper.selectPage(pageObj, wrapper);
+        Page<Evaluation> pageRequest = new Page<>(page, size);
+        IPage<Evaluation> pageResult = evaluationMapper.selectPage(pageRequest, wrapper);
 
-        // 获取评价列表
-        // 单独组装公开响应，隐藏身份时不修改承载数据库记录的原始实体。
-        List<Evaluation> evals = result.getRecords().stream().map(source -> {
+        // 3. 复制公开响应对象，避免隐藏身份时修改数据库实体
+        List<Evaluation> evaluations = new ArrayList<>();
+        for (Evaluation source : pageResult.getRecords()) {
             Evaluation view = new Evaluation();
             BeanUtils.copyProperties(source, view);
-            return view;
-        }).collect(Collectors.toList());
-        // 如果有数据，批量关联查询相关信息
-        if (!evals.isEmpty()) {
-            // 1. 批量查询评价人信息
-            List<Long> fromIds = evals.stream()
-                    .map(Evaluation::getFromUserId)
-                    .distinct()
-                    .collect(Collectors.toList());
-            Map<Long, User> userMap = userMapper.selectBatchIds(fromIds).stream()
-                    .collect(Collectors.toMap(User::getId, u -> u));
+            evaluations.add(view);
+        }
 
-            // 2. 批量查询订单信息
-            List<Long> orderIds = evals.stream()
-                    .map(Evaluation::getOrderId)
-                    .distinct()
-                    .collect(Collectors.toList());
-            Map<Long, Order> orderMap = orderMapper.selectBatchIds(orderIds).stream()
-                    .collect(Collectors.toMap(Order::getId, o -> o));
+        // 4. 有数据时批量关联评价人、订单、商品和商品图片
+        if (!evaluations.isEmpty()) {
+            // 4.1 批量查询评价人信息
+            List<Long> fromUserIds = new ArrayList<>();
+            for (Evaluation evaluation : evaluations) {
+                if (!fromUserIds.contains(evaluation.getFromUserId())) {
+                    fromUserIds.add(evaluation.getFromUserId());
+                }
+            }
+            List<User> fromUsers = userMapper.selectBatchIds(fromUserIds);
+            Map<Long, User> userMap = new LinkedHashMap<>();
+            for (User user : fromUsers) {
+                userMap.put(user.getId(), user);
+            }
 
-            // 3. 从订单中提取商品ID，批量查询商品信息
-            List<Long> productIds = orderMap.values().stream()
-                    .map(Order::getProductId)
-                    .filter(id -> id != null)
-                    .distinct()
-                    .collect(Collectors.toList());
+            // 4.2 批量查询订单信息
+            List<Long> orderIds = new ArrayList<>();
+            for (Evaluation evaluation : evaluations) {
+                if (!orderIds.contains(evaluation.getOrderId())) {
+                    orderIds.add(evaluation.getOrderId());
+                }
+            }
+            List<Order> orders = orderMapper.selectBatchIds(orderIds);
+            Map<Long, Order> orderMap = new LinkedHashMap<>();
+            for (Order order : orders) {
+                orderMap.put(order.getId(), order);
+            }
 
-            // 4. 批量查询商品信息
-            Map<Long, Product> productMap = productIds.isEmpty()
-                    ? Collections.emptyMap()
-                    : productMapper.selectBatchIds(productIds).stream()
-                    .collect(Collectors.toMap(Product::getId, p -> p));
+            // 4.3 从订单中提取商品ID并去重
+            List<Long> productIds = new ArrayList<>();
+            for (Order order : orders) {
+                if (order.getProductId() != null && !productIds.contains(order.getProductId())) {
+                    productIds.add(order.getProductId());
+                }
+            }
 
-            // 5. 批量查询商品首图
-            Map<Long, String> productImageMap = productIds.isEmpty()
-                    ? Collections.emptyMap()
-                    : productImageMapper.selectByProductIds(productIds).stream()
-                    .collect(Collectors.toMap(
-                            ProductImage::getProductId,
-                            ProductImage::getUrl,
-                            (first, ignored) -> first  // 多个图取第一个
-                    ));
+            // 4.4 批量查询商品信息
+            Map<Long, Product> productMap = new LinkedHashMap<>();
+            if (!productIds.isEmpty()) {
+                List<Product> products = productMapper.selectBatchIds(productIds);
+                for (Product product : products) {
+                    productMap.put(product.getId(), product);
+                }
+            }
 
-            // 6. 组装评价列表的展示数据
-            for (Evaluation ev : evals) {
+            // 4.5 批量查询商品图片，每个商品保留查询结果中的第一张
+            Map<Long, String> productImageMap = new LinkedHashMap<>();
+            if (!productIds.isEmpty()) {
+                List<ProductImage> productImages = productImageMapper.selectByProductIds(productIds);
+                for (ProductImage productImage : productImages) {
+                    if (!productImageMap.containsKey(productImage.getProductId())) {
+                        productImageMap.put(productImage.getProductId(), productImage.getUrl());
+                    }
+                }
+            }
+
+            // 4.6 组装评价列表的展示数据
+            for (Evaluation evaluation : evaluations) {
                 // 匿名评价：隐藏评价人信息
-                if (Boolean.TRUE.equals(ev.getAnonymous())) {
-                    ev.setFromUserNickname("匿名用户");
-                    ev.setFromUserAvatar(null);
+                if (Boolean.TRUE.equals(evaluation.getAnonymous())) {
+                    evaluation.setFromUserNickname("匿名用户");
+                    evaluation.setFromUserAvatar(null);
                 } else {
-                    User u = userMap.get(ev.getFromUserId());
-                    if (u != null) {
-                        ev.setFromUserNickname(u.getNickname() != null ? u.getNickname() : u.getUsername());
-                        ev.setFromUserAvatar(u.getAvatar());
+                    User evaluator = userMap.get(evaluation.getFromUserId());
+                    if (evaluator != null) {
+                        if (evaluator.getNickname() != null) {
+                            evaluation.setFromUserNickname(evaluator.getNickname());
+                        } else {
+                            evaluation.setFromUserNickname(evaluator.getUsername());
+                        }
+                        evaluation.setFromUserAvatar(evaluator.getAvatar());
                     }
                 }
 
                 // 补充订单快照信息（商品标题、商品图片）
-                Order order = orderMap.get(ev.getOrderId());
+                Order order = orderMap.get(evaluation.getOrderId());
                 if (order != null) {
-                    ev.setProductId(order.getProductId());
+                    evaluation.setProductId(order.getProductId());
                     Product product = productMap.get(order.getProductId());
+
                     // 优先用订单快照的商品标题，没有则用当前商品标题
-                    ev.setProductTitle(order.getSnapshotTitle() != null
-                            ? order.getSnapshotTitle()
-                            : product != null ? product.getTitle() : null);
-                    // 新订单可能在下单时就没有封面，不能替换成卖家后来添加的图片。
+                    if (order.getSnapshotTitle() != null) {
+                        evaluation.setProductTitle(order.getSnapshotTitle());
+                    } else if (product != null) {
+                        evaluation.setProductTitle(product.getTitle());
+                    } else {
+                        evaluation.setProductTitle(null);
+                    }
+
+                    // 新订单可能在下单时就没有封面，不能替换成卖家后来添加的图片
                     boolean hasSnapshot = order.getSnapshotTitle() != null
                             || order.getUnitPrice() != null || order.getSnapshotImage() != null;
-                    ev.setProductImage(hasSnapshot
-                            ? order.getSnapshotImage()
-                            : productImageMap.get(order.getProductId()));
+                    if (hasSnapshot) {
+                        evaluation.setProductImage(order.getSnapshotImage());
+                    } else {
+                        evaluation.setProductImage(productImageMap.get(order.getProductId()));
+                    }
                 }
             }
         }
 
-        for (Evaluation ev : evals) {
-            // 公开列表不需要订单 ID；匿名评价也不能通过用户 ID 直接找回真实身份。
-            ev.setOrderId(null);
-            if (Boolean.TRUE.equals(ev.getAnonymous())) ev.setFromUserId(null);
+        // 5. 清理公开响应中的关联身份字段
+        for (Evaluation evaluation : evaluations) {
+            // 公开列表不需要订单ID；匿名评价也不能通过用户ID直接找回真实身份
+            evaluation.setOrderId(null);
+            if (Boolean.TRUE.equals(evaluation.getAnonymous())) {
+                evaluation.setFromUserId(null);
+            }
         }
-        result.setRecords(evals);
+        pageResult.setRecords(evaluations);
 
-        // 返回分页结果
-        return Result.success(result);
+        // 6. 返回分页结果
+        return Result.success(pageResult);
     }
 }

@@ -74,8 +74,8 @@ class JavaMarketplaceClient:
             # 3. 先检查 HTTP 状态，再解析 JSON；HTTP 503 等不能当成“没有商品”。
             response.raise_for_status()
             payload = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise JavaServiceError("商品服务暂时不可用") from exc
+        except (httpx.HTTPError, ValueError) as exception:
+            raise JavaServiceError("商品服务暂时不可用") from exception
 
         # 4. HTTP 200 也可能携带业务失败，继续检查 Java Result 中的 code。
         if payload.get("code") != 200:
@@ -90,18 +90,30 @@ class JavaMarketplaceClient:
         direct = raw.get("coverUrl")
         if isinstance(direct, str) and direct.strip():
             return direct.strip()
-        # 2. 否则从图片列表筛掉空值和异常记录，再选 sort 最小的有效图片。
+
+        # 2. 从图片列表筛掉空值和异常记录，再选 sort 最小的有效图片。
         images = raw.get("images")
         if not isinstance(images, list):
             return None
-        valid = [image for image in images if isinstance(image, dict)
-                 and isinstance(image.get("url"), str) and image["url"].strip()]
-        if not valid:
+        valid_images: list[dict[str, Any]] = []
+        for image in images:
+            if not isinstance(image, dict):
+                continue
+            image_url = image.get("url")
+            if isinstance(image_url, str) and image_url.strip():
+                valid_images.append(image)
+        if not valid_images:
             return None
-        # 兼容缺少sort的旧图片数据；不让异常图片记录影响整个商品查询。
-        cover = min(valid, key=lambda image: image.get("sort")
-                    if isinstance(image.get("sort"), (int, float)) else 0)
-        return cover["url"].strip()
+
+        # 3. 缺少 sort 的旧图片按 0 处理；相同 sort 时保留先出现的图片。
+        cover = valid_images[0]
+        cover_sort = cover.get("sort") if isinstance(cover.get("sort"), (int, float)) else 0
+        for image in valid_images[1:]:
+            image_sort = image.get("sort") if isinstance(image.get("sort"), (int, float)) else 0
+            if image_sort < cover_sort:
+                cover = image
+                cover_sort = image_sort
+        return str(cover["url"]).strip()
 
     @staticmethod
     def _card(raw: dict[str, Any]) -> ProductCard:
@@ -120,7 +132,6 @@ class JavaMarketplaceClient:
             detailPath=str(raw.get("detailPath") or f"/product/{product_id}"),
             coverUrl=JavaMarketplaceClient._cover_url(raw),
         )
-
     async def search_listings(
         self,
         keyword: str | None = None,
@@ -150,24 +161,26 @@ class JavaMarketplaceClient:
             size=size,
         )
         # 2. 请求 Java 搜索接口，将 Python 下划线字段转换为 Java 的驼峰字段。
-        # 下面的字典推导式只过滤 None，因此 max_price=0 等有效零值不会被丢掉。
+        # 只发送用户实际指定的条件；max_price=0 等有效零值不能被过滤。
+        query_params = {
+            "keyword": query.keyword,
+            "categoryId": query.category_id,
+            "minPrice": query.min_price,
+            "maxPrice": query.max_price,
+            "conditionLevel": query.condition_level,
+            "page": query.page,
+            "size": query.size,
+            "sort": query.sort,
+        }
+        request_params: dict[str, Any] = {}
+        for key, value in query_params.items():
+            if value is not None:
+                request_params[key] = value
+
         data = await self._request(
             "GET",
             "/internal/marketplace/listings/search",
-            params={
-                key: value
-                for key, value in {
-                    "keyword": query.keyword,
-                    "categoryId": query.category_id,
-                    "minPrice": query.min_price,
-                    "maxPrice": query.max_price,
-                    "conditionLevel": query.condition_level,
-                    "page": query.page,
-                    "size": query.size,
-                    "sort": query.sort,
-                }.items()
-                if value is not None
-            },
+            params=request_params,
         )
         # 3. Java 分页结果中 records 才是商品列表，将每项转换成统一卡片。
         records = (data or {}).get("records", [])

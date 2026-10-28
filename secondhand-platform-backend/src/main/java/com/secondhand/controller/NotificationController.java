@@ -43,12 +43,13 @@ public class NotificationController {
                        @Parameter(description = "每页条数", example = "10")
                        @RequestParam(defaultValue = "10") Integer size,  // 每页条数，默认10
                        @Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 分页查询通知
+
+        // 2. 调用业务层，分页查询通知
         return notificationService.getMyNotifications(userId, page, size);
     }
 
@@ -58,12 +59,13 @@ public class NotificationController {
     @GetMapping("/unread-count")  // GET /notification/unread-count
     @Operation(summary = "未读通知数", description = "需要登录，返回当前用户未读通知数量，用于导航栏红点")
     public Result unreadCount(@Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 查询未读数
+
+        // 2. 调用业务层，查询未读通知数
         return notificationService.getUnreadCount(userId);
     }
 
@@ -75,12 +77,13 @@ public class NotificationController {
     public Result read(@Parameter(description = "通知ID", example = "1", required = true)
                        @PathVariable Long id,  // 通知ID，从路径获取
                        @Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 标记已读
+
+        // 2. 调用业务层，标记单条通知已读
         return notificationService.markRead(userId, id);
     }
 
@@ -90,12 +93,13 @@ public class NotificationController {
     @PutMapping("/read-all")  // PUT /notification/read-all
     @Operation(summary = "全部标记已读", description = "需要登录，把当前用户所有未读通知置为已读")
     public Result readAll(@Parameter(hidden = true) HttpSession session) {  // 当前会话
-        // 获取当前登录用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 全部置为已读
+
+        // 2. 调用业务层，把全部通知标记为已读
         return notificationService.markAllRead(userId);
     }
 }

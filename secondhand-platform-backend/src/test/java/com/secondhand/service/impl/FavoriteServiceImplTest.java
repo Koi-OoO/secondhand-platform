@@ -1,8 +1,10 @@
 package com.secondhand.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.secondhand.entity.Favorite;
 import com.secondhand.entity.Product;
+import com.secondhand.entity.ProductImage;
 import com.secondhand.mapper.FavoriteMapper;
 import com.secondhand.mapper.ProductImageMapper;
 import com.secondhand.mapper.ProductMapper;
@@ -14,6 +16,11 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -148,6 +155,51 @@ class FavoriteServiceImplTest {
         assertThat(result.getCode()).isEqualTo(200);
         assertThat(result.getData()).isEqualTo("已取消收藏");
         verify(productMapper, never()).incrementLikeCount(10L, -1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void myFavoritesKeepRecordsAndAttachProductImages() {
+        Favorite firstFavorite = new Favorite();
+        firstFavorite.setId(100L);
+        firstFavorite.setProductId(10L);
+        firstFavorite.setCreateTime(new Date(1000L));
+        Favorite secondFavorite = new Favorite();
+        secondFavorite.setId(101L);
+        secondFavorite.setProductId(11L);
+        secondFavorite.setCreateTime(new Date(2000L));
+
+        Page<Favorite> page = new Page<>(1, 12);
+        page.setRecords(Arrays.asList(firstFavorite, secondFavorite));
+        page.setTotal(2);
+
+        Product product = new Product();
+        product.setId(10L);
+        product.setTitle("已存在商品");
+        ProductImage image = new ProductImage();
+        image.setProductId(10L);
+        image.setUrl("/uploads/1.jpg");
+
+        List<Long> productIds = Arrays.asList(10L, 11L);
+        when(favoriteMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        when(productMapper.selectBatchIds(productIds)).thenReturn(Collections.singletonList(product));
+        when(productImageMapper.selectByProductIds(productIds)).thenReturn(Collections.singletonList(image));
+
+        Result result = service.getMyFavorites(1L, 1, 12);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        Map<String, Object> data = (Map<String, Object>) result.getData();
+        List<Map<String, Object>> records = (List<Map<String, Object>>) data.get("records");
+        assertThat(records).hasSize(2);
+        assertThat(records.get(0).get("favoriteId")).isEqualTo(100L);
+
+        Product attachedProduct = (Product) records.get(0).get("product");
+        assertThat(attachedProduct.getImages()).containsExactly(image);
+        assertThat(attachedProduct.getImageUrls()).isNull();
+
+        assertThat(records.get(1).get("favoriteId")).isEqualTo(101L);
+        assertThat(records.get(1)).doesNotContainKey("product");
+        assertThat(data.get("total")).isEqualTo(2L);
     }
 
     private Product product(Long id, Integer status) {

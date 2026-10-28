@@ -84,23 +84,29 @@ def create_marketplace_agent(tools, model_name: str | None = None):
     try:
         from langchain.agents import create_agent
         from langchain_openai import ChatOpenAI
-    except ImportError as exc:  # 运行环境未安装 LangChain OpenAI 适配器
-        raise AgentUnavailableError("AI 运行依赖未安装") from exc
+    except ImportError as exception:  # 运行环境未安装 LangChain OpenAI 适配器
+        raise AgentUnavailableError("AI 运行依赖未安装") from exception
 
     # 2. 准备模型名称、访问密钥和服务地址。这里只传递配置，不输出密钥。
     model_options = {
-        'model': model_name,
-        'api_key': settings.openai_api_key,
-        'base_url': settings.openai_base_url or None,
+        "model": model_name,
+        "api_key": settings.openai_api_key,
+        "base_url": settings.openai_base_url or None,
     }
-    if urlsplit(settings.openai_base_url or '').hostname == 'api.deepseek.com':
+    if urlsplit(settings.openai_base_url or "").hostname == "api.deepseek.com":
         # ChatOpenAI 不保留 DeepSeek 的 reasoning_content，首次联调使用非思考模式，
         # 避免工具结果回传时因缺少推理内容而失败。
-        model_options['extra_body'] = {'thinking': {'type': 'disabled'}}
+        model_options["extra_body"] = {"thinking": {"type": "disabled"}}
+
     # 3. 创建远程模型客户端；** 把字典拆成参数，此时还没有发送用户问题。
     model = ChatOpenAI(**model_options)
+
     # 4. 将模型、商品工具和系统规则组装成 Agent；执行时由框架协调模型与工具。
-    return create_agent(model=model, tools=tools, system_prompt=MARKETPLACE_SYSTEM_PROMPT)
+    return create_agent(
+        model=model,
+        tools=tools,
+        system_prompt=MARKETPLACE_SYSTEM_PROMPT,
+    )
 
 
 async def run_agent(
@@ -134,7 +140,10 @@ async def run_agent(
     )
 
     # 4. 正常请求创建真实 Agent；测试可传入 agent_factory，用替身避免调用收费模型。
-    agent = agent_factory(tools) if agent_factory is not None else create_marketplace_agent(tools, model_name)
+    if agent_factory is not None:
+        agent = agent_factory(tools)
+    else:
+        agent = create_marketplace_agent(tools, model_name)
     if inspect.isawaitable(agent):
         # 兼容异步创建的测试替身；普通 create_agent 的返回值不需要这一步。
         agent = await agent
@@ -142,9 +151,9 @@ async def run_agent(
     try:
         # 5. 开始执行：模型提出工具调用 → Python 执行工具 → 结果交回模型 → 得到最终回答。
         # await 等待整轮执行完成；目前只传当前问题，没有加载以前的聊天记录。
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": request.message}]}
-        )
+        result = await agent.ainvoke({
+            "messages": [{"role": "user", "content": request.message}]
+        })
     except JavaServiceError:
         # 本轮失败时不展示商品卡片，避免把失败解释为一次成功搜索。
         return AgentRunResult(
@@ -153,8 +162,8 @@ async def run_agent(
             items=[],
             traceId=request.trace_id,
         )
-    except Exception as exc:
-        if isinstance(exc, AgentUnavailableError):
+    except Exception as exception:
+        if isinstance(exception, AgentUnavailableError):
             raise
         return AgentRunResult(
             conversationId=request.conversation_id,

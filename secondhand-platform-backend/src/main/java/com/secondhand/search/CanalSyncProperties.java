@@ -22,20 +22,34 @@ public class CanalSyncProperties {
     private int idleDelayMillis = 500;
 
     public void validate(ElasticsearchProperties es) {
-        if (!es.isEnabled()) throw new IllegalArgumentException("启用 Canal 同步必须同时启用 ES 搜索");
-        if (es.isImportOnStartup()) throw new IllegalArgumentException("全量导入与 Canal 消费不可同时启用，请按初始化步骤分阶段启动");
-        if (host == null || host.isBlank() || port < 1 || port > 65535
+        // 1. Canal 同步依赖 ES 搜索，且不能与启动时全量导入同时启用
+        if (!es.isEnabled()) {
+            throw new IllegalArgumentException("启用 Canal 同步必须同时启用 ES 搜索");
+        }
+        if (es.isImportOnStartup()) {
+            throw new IllegalArgumentException("全量导入与 Canal 消费不可同时启用，请按初始化步骤分阶段启动");
+        }
+
+        // 2. 校验连接地址、destination、schema 和轮询参数
+        if (host == null || host.isBlank()
+                || port < 1 || port > 65535
                 || destination == null || !destination.matches("[A-Za-z0-9_-]+")
                 || schema == null || !schema.matches("[A-Za-z0-9_]+")
-                || batchSize < 1 || batchSize > 1000 || socketTimeoutMillis < 1000 || socketTimeoutMillis > 60000
-                || retryDelayMillis < 1000 || retryDelayMillis > 60000 || idleDelayMillis < 100 || idleDelayMillis > 10000) {
+                || batchSize < 1 || batchSize > 1000
+                || socketTimeoutMillis < 1000 || socketTimeoutMillis > 60000
+                || retryDelayMillis < 1000 || retryDelayMillis > 60000
+                || idleDelayMillis < 100 || idleDelayMillis > 10000) {
             throw new IllegalArgumentException("Canal 连接或轮询配置无效");
         }
+
+        // 3. 客户端用户名和密码必须成对配置
         if ((username == null || username.isBlank()) != (password == null || password.isBlank())) {
             throw new IllegalArgumentException("Canal 客户端用户名和密码必须同时配置或同时留空");
         }
     }
 
     /** 订阅白名单；库名已校验，不允许通过正则扩大订阅范围。 */
-    public String filter() { return schema + "\\.(product|product_image|category)"; }
+    public String filter() {
+        return schema + "\\.(product|product_image|category)";
+    }
 }

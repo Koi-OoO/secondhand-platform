@@ -26,18 +26,15 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 校验用户名和密码，返回登录结果。
-     *
-     * 业务流程：
-     * 1. 根据用户名查询用户
-     * 2. 判断用户是否存在
-     * 3. 校验密码是否正确
-     * 4. 返回对应的登录结果
      */
     @Override
     public Result login(String username, String password) {
+        // 1. 校验账号和密码是否填写
         if (username == null || username.isBlank() || password == null || password.isEmpty()) {
             return Result.error("账号或密码错误");
         }
+
+        // 2. 查询用户，校验账号状态和密码
         // 先按用户名查出用户，再校验密码是否正确
         User user = userMapper.selectByUsername(username);
 
@@ -46,6 +43,7 @@ public class UserServiceImpl implements UserService {
             return Result.error("账号或密码错误");
         }
 
+        // 3. 返回登录校验结果，由控制器建立会话
         // 校验通过，返回登录成功
         return Result.success("登录成功");
     }
@@ -62,21 +60,16 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 注册新用户，并补齐默认昵称与加密密码。
-     *
-     * 业务流程：
-     * 1. 先检查用户名是否已存在
-     * 2. 对密码进行加密
-     * 3. 如果没有填写昵称，则自动生成默认昵称
-     * 4. 设置用户启用状态
-     * 5. 写入数据库
      */
     @Override
     public Result register(User user) {
+        // 1. 检查用户名是否已注册
         // 先检查用户名是否已存在，避免重复注册
         if (userMapper.selectByUsername(user.getUsername()) != null) {
             return Result.error("用户名已存在");
         }
 
+        // 2. 规范化邮箱，校验格式和占用情况
         if (user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
             String email = user.getEmail().trim().toLowerCase(Locale.ROOT);
             if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
@@ -90,9 +83,11 @@ public class UserServiceImpl implements UserService {
             user.setEmail(null);
         }
 
+        // 3. 对密码进行哈希处理，不保存明文密码
         // 注册时统一对密码加密后再落库
         user.setPassword(PasswordUtil.encrypt(user.getPassword()));
 
+        // 4. 整理昵称，未填写时生成默认昵称
         // 处理昵称：未填写时生成默认昵称，避免前端展示空值
         if (user.getNickname() == null || user.getNickname().trim().isEmpty()) {
             user.setNickname(generateDefaultNickname());
@@ -101,12 +96,14 @@ public class UserServiceImpl implements UserService {
             user.setNickname(user.getNickname().trim());
         }
 
+        // 5. 设置账号状态，邮箱仍需通过安全流程验证
         // 新用户默认设置为启用状态
         user.setStatus(1);
 
         // 邮箱即使填写，也必须通过账号安全流程验证
         user.setEmailVerified(0);
 
+        // 6. 保存用户并返回注册结果
         // 写入用户数据到数据库
         userMapper.insert(user);
 
@@ -118,10 +115,13 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public User getUserById(Long userId) {
+        // 1. 校验用户ID
         // 参数校验：用户 ID 不能为空
         if (userId == null) {
             return null;
         }
+
+        // 2. 查询用户基础信息
         return userMapper.selectById(userId);
     }
 
@@ -141,11 +141,13 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public boolean updateById(User user) {
+        // 1. 校验用户对象和ID
         // 参数校验：用户对象和用户 ID 不能为空
         if (user == null || user.getId() == null) {
             return false;
         }
 
+        // 2. 更新资料，根据受影响行数返回结果
         // 返回受影响行数，大于 0 说明更新成功
         return userMapper.updateById(user) > 0;
     }

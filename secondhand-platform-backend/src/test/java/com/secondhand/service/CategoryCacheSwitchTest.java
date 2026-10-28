@@ -11,7 +11,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -45,7 +44,7 @@ class CategoryCacheSwitchTest {
     }
 
     // 使用本地缓存验证 Spring 注解代理及配置表达式，不要求启动 Redis。
-    @Configuration(proxyBeanMethods = false)
+    // 仅由 ApplicationContextRunner 显式加载；不加 @Configuration，避免进入主应用组件扫描。
     @EnableCaching
     static class CacheTestConfig {
         @Bean

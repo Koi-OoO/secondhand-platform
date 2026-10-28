@@ -1,11 +1,11 @@
 package com.secondhand.internal;
 
+import com.secondhand.search.ProductSearchUnavailableException;
 import com.secondhand.service.ProductService;
 import com.secondhand.util.Result;
-import com.secondhand.search.ProductSearchUnavailableException;
+import java.math.BigDecimal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import java.math.BigDecimal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,7 +32,9 @@ public class InternalMarketplaceController {
                          @RequestParam(required = false) BigDecimal maxPrice,
                          @RequestParam(required = false) Integer conditionLevel,
                          @RequestParam(defaultValue = "latest") String sort) {
-        if (page == null || page < 1 || size == null || size < 1 || size > 20
+        // 1. 校验分页、分类、成色和价格区间
+        if (page == null || page < 1
+                || size == null || size < 1 || size > 20
                 || (categoryId != null && categoryId < 1)
                 || (conditionLevel != null && (conditionLevel < 1 || conditionLevel > 4))
                 || (minPrice != null && minPrice.signum() < 0)
@@ -40,6 +42,8 @@ public class InternalMarketplaceController {
                 || (minPrice != null && maxPrice != null && maxPrice.compareTo(minPrice) < 0)) {
             return Result.error("查询参数不合法");
         }
+
+        // 2. 调用商品服务，执行 AI 专用商品查询
         return productService.pageProductsForAi(page, size, categoryId, keyword,
                 minPrice, maxPrice, conditionLevel, sort);
     }
@@ -47,19 +51,23 @@ public class InternalMarketplaceController {
     /** 查询单个商品详情。 */
     @GetMapping("/{id}")
     public Result detail(@PathVariable Long id) {
+        // 1. 校验商品ID
         if (id == null || id < 1) {
             return Result.error("商品ID不合法");
         }
+
+        // 2. 调用商品服务，查询 AI 可用的商品详情
         return productService.getDetailForAi(id);
     }
+
     /** 搜索失败保留明确状态，Python 据此提示用户重试，不改用旧 MySQL 搜索。 */
     @ExceptionHandler(ProductSearchUnavailableException.class)
-    public ResponseEntity<Result> unavailable(ProductSearchUnavailableException ex) {
-        return ResponseEntity.status(503).body(Result.error(ex.getMessage()));
+    public ResponseEntity<Result> unavailable(ProductSearchUnavailableException exception) {
+        return ResponseEntity.status(503).body(Result.error(exception.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Result> invalidSearch(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(Result.error(ex.getMessage()));
+    public ResponseEntity<Result> invalidSearch(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(Result.error(exception.getMessage()));
     }
 }

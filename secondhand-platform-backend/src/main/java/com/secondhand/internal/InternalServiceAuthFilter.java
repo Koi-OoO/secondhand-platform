@@ -11,9 +11,9 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -27,8 +27,11 @@ public class InternalServiceAuthFilter implements Filter {
 
     @Autowired
     public InternalServiceAuthFilter(AiServiceProperties properties, Environment environment) {
+        // 1. 读取配置的内部令牌，null按空串处理
         String configuredToken = properties.getInternalToken();
         this.internalToken = configuredToken == null ? "" : configuredToken;
+
+        // 2. 生产环境禁止空令牌或默认开发令牌
         if (environment.acceptsProfiles("prod", "production")
                 && (this.internalToken.isBlank()
                 || "dev-ai-internal-token".equals(this.internalToken))) {
@@ -36,6 +39,7 @@ public class InternalServiceAuthFilter implements Filter {
         }
     }
 
+    /** 单元测试使用的固定令牌构造器。 */
     public InternalServiceAuthFilter(String internalToken) {
         if (internalToken == null || internalToken.isBlank()) {
             throw new IllegalArgumentException("内部服务令牌不能为空");
@@ -47,20 +51,28 @@ public class InternalServiceAuthFilter implements Filter {
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
         HttpServletRequest httpRequest = (HttpServletRequest) request;
+
+        // 1. 非内部接口直接放行，不影响普通业务请求
         if (!httpRequest.getRequestURI().startsWith("/internal/")) {
             chain.doFilter(request, response);
             return;
         }
-        String provided = httpRequest.getHeader(TOKEN_HEADER);
-        boolean valid = provided != null && MessageDigest.isEqual(
-                provided.getBytes(StandardCharsets.UTF_8), internalToken.getBytes(StandardCharsets.UTF_8));
-        if (!valid) {
+
+        // 2. 使用恒定时间比较，避免通过响应时间推测令牌
+        String providedToken = httpRequest.getHeader(TOKEN_HEADER);
+        boolean tokenValid = providedToken != null && MessageDigest.isEqual(
+                providedToken.getBytes(StandardCharsets.UTF_8), internalToken.getBytes(StandardCharsets.UTF_8));
+
+        // 3. 令牌不匹配时返回401，不进入内部接口
+        if (!tokenValid) {
             HttpServletResponse httpResponse = (HttpServletResponse) response;
             httpResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             httpResponse.setContentType("application/json; charset=utf-8");
             httpResponse.getWriter().write("{\"code\":401,\"message\":\"未授权\",\"data\":null}");
             return;
         }
+
+        // 4. 标记本次请求已认证，供后续拦截器判断
         httpRequest.setAttribute(AUTHENTICATED_ATTRIBUTE, Boolean.TRUE);
         chain.doFilter(request, response);
     }

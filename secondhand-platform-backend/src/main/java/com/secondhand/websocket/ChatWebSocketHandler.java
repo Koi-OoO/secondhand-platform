@@ -36,15 +36,28 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ConcurrentHashMap<String, Long> retiredHttpSessions = new ConcurrentHashMap<>();
 
     public void closeSessionConnections(String httpSessionId) {
-        if (httpSessionId == null) return;
+        // 1. 没有会话ID时无需处理
+        if (httpSessionId == null) {
+            return;
+        }
+
+        // 2. 记录已撤销的会话，保留7天，拒绝迟到的旧连接
         long now = System.currentTimeMillis();
         retiredHttpSessions.entrySet().removeIf(entry -> entry.getValue() < now);
         retiredHttpSessions.put(httpSessionId, now + 7 * 86400_000L);
-        onlineSessions.values().forEach(connections -> connections.forEach(connection -> {
-            if (httpSessionId.equals(connection.getAttributes().get(HTTP_SESSION_ID_KEY))) {
-                try { synchronized (connection) { connection.close(CloseStatus.NORMAL); } }
-                catch (IOException ex) { log.warn("WebSocket会话关闭失败", ex); }
-                finally { afterConnectionClosed(connection, CloseStatus.NORMAL); }
+
+        // 3. 遍历在线连接，关闭属于该会话的连接
+        onlineSessions.values().forEach(sessions -> sessions.forEach(session -> {
+            if (httpSessionId.equals(session.getAttributes().get(HTTP_SESSION_ID_KEY))) {
+                try {
+                    synchronized (session) {
+                        session.close(CloseStatus.NORMAL);
+                    }
+                } catch (IOException exception) {
+                    log.warn("WebSocket会话关闭失败", exception);
+                } finally {
+                    afterConnectionClosed(session, CloseStatus.NORMAL);
+                }
             }
         }));
     }
@@ -54,26 +67,39 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        // 1. 握手阶段已被撤销的会话直接关闭
         Object httpSessionId = session.getAttributes().get(HTTP_SESSION_ID_KEY);
         if (httpSessionId instanceof String && retiredHttpSessions.containsKey(httpSessionId)) {
-            try { session.close(CloseStatus.NORMAL); }
-            catch (IOException ex) { log.warn("WebSocket会话关闭失败", ex); }
+            try {
+                session.close(CloseStatus.NORMAL);
+            } catch (IOException exception) {
+                log.warn("WebSocket会话关闭失败", exception);
+            }
             return;
         }
-        // 取握手时存入的用户ID
+
+        // 2. 取握手时存入的用户ID
         Long userId = currentUserId(session);
         if (userId == null) {
             return;  // 理论上不会发生（握手拦截器已校验登录）
         }
-        // computeIfAbsent并发安全地初始化集合，再把当前连接加入
-        onlineSessions.computeIfAbsent(userId, k -> ConcurrentHashMap.<WebSocketSession>newKeySet()).add(session);
-        // 登记后再检查一次，覆盖第一次检查与登记之间恰好发生账号切换的情况。
+
+        // 3. 并发安全地初始化在线集合，再把当前连接加入
+        onlineSessions.computeIfAbsent(userId, userIdKey -> ConcurrentHashMap.<WebSocketSession>newKeySet()).add(session);
+
+        // 4. 登记后再检查一次，覆盖第一次检查与登记之间恰好发生账号切换的情况
         if (httpSessionId instanceof String && retiredHttpSessions.containsKey(httpSessionId)) {
-            try { session.close(CloseStatus.NORMAL); }
-            catch (IOException ex) { log.warn("WebSocket会话关闭失败", ex); }
-            finally { afterConnectionClosed(session, CloseStatus.NORMAL); }
+            try {
+                session.close(CloseStatus.NORMAL);
+            } catch (IOException exception) {
+                log.warn("WebSocket会话关闭失败", exception);
+            } finally {
+                afterConnectionClosed(session, CloseStatus.NORMAL);
+            }
             return;
         }
+
+        // 5. 更新最后活跃时间并记录连接数
         touchUser(userId);
         log.info("WebSocket连接建立：userId={} 该用户在线连接数={}", userId, onlineSessions.get(userId).size());
     }
@@ -107,15 +133,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      */
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
-        // 客户端定时发送ping用于保活
+        // 1. 只处理客户端定时发送的 ping
         if ("ping".equals(message.getPayload())) {
+            // 2. 更新最后活跃时间
             Long userId = currentUserId(session);
             if (userId != null) {
                 touchUser(userId);
             }
-            // WebSocketSession非线程安全，发送需串行化
+
+            // 3. WebSocketSession非线程安全，串行回复 pong
             synchronized (session) {
-                session.sendMessage(new TextMessage("pong"));  // 心跳应答
+                session.sendMessage(new TextMessage("pong"));
             }
         }
     }
@@ -129,26 +157,29 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      * @param json   已序列化好的JSON字符串
      */
     public void sendToUser(Long userId, String json) {
+        // 1. 没有接收者时直接跳过
         if (userId == null) {
             return;
         }
-        // 取出该用户的在线连接
+
+        // 2. 取出该用户的在线连接，离线直接跳过（消息已落库，下次拉取可见）
         Set<WebSocketSession> sessions = onlineSessions.get(userId);
         if (sessions == null || sessions.isEmpty()) {
-            return;  // 用户不在线，跳过推送
+            return;
         }
-        // 遍历该用户的所有在线连接逐个推送
+
+        // 3. 逐个在线连接推送，单个连接失败不影响其他连接
         for (WebSocketSession session : sessions) {
             try {
                 // WebSocketSession非线程安全，对同一连接的发送需串行化
                 synchronized (session) {
-                    if (session.isOpen()) {  // 仅向仍打开的连接发送
+                    if (session.isOpen()) {
                         session.sendMessage(new TextMessage(json));
                     }
                 }
-            } catch (Exception ex) {
+            } catch (Exception exception) {
                 // 推送失败仅记日志，不影响业务（best-effort）
-                log.warn("WebSocket推送失败：userId={}", userId, ex);
+                log.warn("WebSocket推送失败：userId={}", userId, exception);
             }
         }
     }
@@ -157,16 +188,21 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      * 判断用户当前是否在线
      */
     public boolean isOnline(Long userId) {
+        // 1. 没有连接记录时直接视为离线
         Set<WebSocketSession> sessions = onlineSessions.get(userId);
         if (sessions == null || sessions.isEmpty()) {
             return false;
         }
+
+        // 2. 清理已经关闭的连接
         sessions.removeIf(session -> !session.isOpen());
         if (sessions.isEmpty()) {
             onlineSessions.remove(userId);
             touchUser(userId);
             return false;
         }
+
+        // 3. 仍有打开的连接则在线
         return true;
     }
 

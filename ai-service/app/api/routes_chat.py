@@ -25,11 +25,11 @@ async def chat(
     try:
         # 2. 把请求交给 Agent 主流程，等待模型及所需工具执行结束。
         result = await run_agent(request)
-    except AgentUnavailableError as exc:
+    except AgentUnavailableError as exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI 服务暂时不可用",
-        ) from exc
+        ) from exception
     # 3. 转换成约定好的响应结构，保留 conversationId、searchFilters 等 Java 字段名。
     # response_model 也会按该结构校验并序列化 HTTP 响应。
     return AgentChatResponse.model_validate(result.model_dump(by_alias=True))

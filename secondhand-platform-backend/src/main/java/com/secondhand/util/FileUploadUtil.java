@@ -25,7 +25,7 @@ public class FileUploadUtil {
     private static final Logger log = LoggerFactory.getLogger(FileUploadUtil.class);
 
     // 允许上传的图片格式
-    private static final Set<String> ALLOWED = new HashSet<>(Arrays.asList("jpg", "jpeg", "png", "webp"));
+    private static final Set<String> ALLOWED_EXTENSIONS = new HashSet<>(Arrays.asList("jpg", "jpeg", "png", "webp"));
     // 单个文件最大5MB
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
     // 单次最多上传9张图片
@@ -65,7 +65,7 @@ public class FileUploadUtil {
      * 初始化上传客户端（Spring容器启动时调用）
      */
     public void init() {
-        // 如果配置了OSS参数，创建OSS客户端
+        // 配置了OSS地址时才创建客户端，否则沿用本地存储
         if (endpoint != null && !endpoint.isEmpty()) {
             ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
             log.info("OSS客户端初始化成功：存储桶={} 访问地址={}", bucketName, endpoint);
@@ -76,7 +76,7 @@ public class FileUploadUtil {
      * 销毁上传客户端（Spring容器关闭时调用）
      */
     public void destroy() {
-        // 关闭OSS客户端，释放资源
+        // 关闭OSS客户端，释放连接资源
         if (ossClient != null) {
             ossClient.shutdown();
         }
@@ -99,8 +99,8 @@ public class FileUploadUtil {
     /**
      * 单文件上传核心逻辑
      */
-    private Result upload(MultipartFile file, boolean useOss) {
-        // 1. 校验文件
+    private Result upload(MultipartFile file, boolean useOssStorage) {
+        // 1. 校验文件是否为空、大小和格式是否合法
         Result validateError = validate(file);
         if (validateError != null) {
             return validateError;
@@ -109,19 +109,18 @@ public class FileUploadUtil {
         // 2. 获取原文件名和扩展名
         String originalFilename = file.getOriginalFilename();
         String extension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
+
         // 3. 生成唯一文件名（UUID + 扩展名）
         String objectName = OSS_PATH_PREFIX + UUID.randomUUID().toString().replace("-", "") + "." + extension;
 
-        // 4. 上传文件
+        // 4. 按配置选择OSS或本地存储
         String url;
-        if (useOss && ossClient != null) {
-            // 上传到OSS
+        if (useOssStorage && ossClient != null) {
             url = uploadToOss(file, bucketName, objectName);
             if (url == null) {
                 return Result.error("文件上传失败，请重试");
             }
         } else {
-            // 上传到本地
             url = uploadToLocal(file, objectName);
             if (url == null) {
                 return Result.error("文件保存失败，请重试");
@@ -149,8 +148,8 @@ public class FileUploadUtil {
     /**
      * 批量上传核心逻辑
      */
-    private Result uploadBatch(List<MultipartFile> files, boolean useOss) {
-        // 1. 校验文件列表
+    private Result uploadBatch(List<MultipartFile> files, boolean useOssStorage) {
+        // 1. 校验文件列表非空且不超过数量上限
         if (files == null || files.isEmpty()) {
             return Result.error("请选择要上传的文件");
         }
@@ -158,14 +157,14 @@ public class FileUploadUtil {
             return Result.error("最多批量上传 " + MAX_FILE_COUNT + " 张图片");
         }
 
-        // 2. 逐个上传
+        // 2. 逐个上传；任意一张失败就立即返回失败结果
         List<String> urls = new ArrayList<>();
         for (MultipartFile file : files) {
-            Result r = upload(file, useOss);
-            if (r.getCode() == 200) {
-                urls.add(r.getData().toString());  // 上传成功，保存URL
+            Result uploadResult = upload(file, useOssStorage);
+            if (uploadResult.getCode() == 200) {
+                urls.add(uploadResult.getData().toString());
             } else {
-                return r;  // 任意一张失败，立即返回失败
+                return uploadResult;
             }
         }
         return Result.success(urls);
@@ -175,25 +174,25 @@ public class FileUploadUtil {
      * 校验上传文件
      */
     private Result validate(MultipartFile file) {
-        // 文件不能为空
+        // 1. 文件不能为空
         if (file == null || file.isEmpty()) {
             return Result.error("请选择要上传的文件");
         }
-        // 文件大小不能超过5MB
+
+        // 2. 文件大小不能超过5MB
         if (file.getSize() > MAX_FILE_SIZE) {
             return Result.error("文件大小不能超过 5MB");
         }
 
-        // 获取文件名
+        // 3. 文件名必须包含扩展名
         String originalFilename = file.getOriginalFilename();
-        // 文件名不能为空且必须包含扩展名
         if (originalFilename == null || !originalFilename.contains(".")) {
             return Result.error("文件格式不支持");
         }
 
-        // 检查扩展名是否在允许列表中
+        // 4. 扩展名必须在允许的图片格式内
         String extension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
-        if (!ALLOWED.contains(extension)) {
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
             return Result.error("仅支持 jpg、jpeg、png、webp 格式的图片");
         }
         return null;  // 校验通过
@@ -204,17 +203,18 @@ public class FileUploadUtil {
      */
     private String uploadToOss(MultipartFile file, String bucket, String objectName) {
         try {
-            // 创建OSS上传请求
+            // 1. 创建并执行OSS上传请求
             PutObjectRequest request = new PutObjectRequest(bucket, objectName, file.getInputStream());
-            // 执行上传
             ossClient.putObject(request);
-            // 设置文件为公共读权限（方便前端直接访问）
+
+            // 2. 设置公共读权限，方便前端直接访问
             ossClient.setObjectAcl(bucket, objectName, CannedAccessControlList.PublicRead);
-        } catch (IOException e) {
-            log.error("OSS上传失败：{}", objectName, e);
+        } catch (IOException exception) {
+            log.error("OSS上传失败：{}", objectName, exception);
             return null;
         }
-        // 返回可访问的URL
+
+        // 3. 返回可访问的URL
         return "https://" + bucketName + "." + endpoint + "/" + objectName;
     }
 
@@ -223,20 +223,21 @@ public class FileUploadUtil {
      */
     private String uploadToLocal(MultipartFile file, String objectName) {
         try {
-            // 创建目录（如果不存在）
+            // 1. 确保本地图片目录存在
             File dir = new File(localStoragePath + OSS_PATH_PREFIX);
             if (!dir.exists()) {
-                dir.mkdirs();  // 递归创建目录
+                dir.mkdirs();
             }
-            // 目标文件路径（去掉OSS_PATH_PREFIX前缀）
+
+            // 2. 去掉OSS前缀后保存到本地目录
             File dest = new File(dir, objectName.substring(OSS_PATH_PREFIX.length()));
-            // 保存文件到本地
             file.transferTo(dest);
-        } catch (IOException e) {
-            log.error("本地文件保存失败：{}", objectName, e);
+        } catch (IOException exception) {
+            log.error("本地文件保存失败：{}", objectName, exception);
             return null;
         }
-        // 返回可访问的URL（通过静态资源映射）
+
+        // 3. 返回通过静态资源映射访问的URL
         return "/uploads/" + objectName;
     }
 }

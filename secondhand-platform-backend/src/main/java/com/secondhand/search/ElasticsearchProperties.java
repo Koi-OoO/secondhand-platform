@@ -22,25 +22,35 @@ public class ElasticsearchProperties {
 
     /** 启用客户端前校验配置；异常不回显可能包含凭据的原始 URL 或密码。 */
     public void validate() {
+        // 1. 校验地址协议、主机、路径和端口
         try {
             URI endpoint = new URI(url == null ? "" : url);
             String path = endpoint.getRawPath();
             if (!("http".equals(endpoint.getScheme()) || "https".equals(endpoint.getScheme()))
-                    || endpoint.getHost() == null || endpoint.getRawUserInfo() != null
-                    || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null
+                    || endpoint.getHost() == null
+                    || endpoint.getRawUserInfo() != null
+                    || endpoint.getRawQuery() != null
+                    || endpoint.getRawFragment() != null
                     || (path != null && !path.isEmpty() && !"/".equals(path))
-                    || endpoint.getPort() == 0 || endpoint.getPort() > 65535) {
+                    || endpoint.getPort() == 0
+                    || endpoint.getPort() > 65535) {
                 throw new IllegalArgumentException("ES 地址必须是 HTTP(S) 主机地址，不允许内嵌凭据、路径或查询参数");
             }
-        } catch (URISyntaxException ex) {
+        } catch (URISyntaxException exception) {
             throw new IllegalArgumentException("ES 地址格式无效");
         }
+
+        // 2. 校验索引名
         if (indexName == null || indexName.length() > 255 || !indexName.matches("[a-z0-9][a-z0-9_.-]*")) {
             throw new IllegalArgumentException("商品索引名需以小写字母或数字开头，只包含小写字母、数字、下划线、点或连字符");
         }
+
+        // 3. 校验连接和读取超时
         if (connectTimeoutMillis <= 0 || socketTimeoutMillis <= 0) {
             throw new IllegalArgumentException("ES 连接和读取超时必须大于 0");
         }
+
+        // 4. 用户名和密码必须同时配置或同时留空
         if (hasText(username) != hasText(password)) {
             throw new IllegalArgumentException("ES 用户名和密码必须同时配置或同时留空");
         }

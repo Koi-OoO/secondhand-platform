@@ -88,11 +88,11 @@ def build_marketplace_tools(
             )
             # 2. 转成字典，再用 ** 拆成参数，交给 Java 客户端查询真实商品。
             cards = await client.search_listings(**query.model_dump())
-        except (JavaServiceError, ValueError) as exc:
+        except (JavaServiceError, ValueError) as exception:
             # 查询失败时清除本轮之前的查询结果，并把错误信息作为工具结果交回 Agent。
             execution_context.latest_items = []
             execution_context.latest_search_filters = None
-            return json.dumps({"error": str(exc), "items": []}, ensure_ascii=False)
+            return json.dumps({"error": str(exception), "items": []}, ensure_ascii=False)
         # 3. 为前端保存最新一次成功查询的卡片；这是独立于模型回答的真实数据。
         execution_context.latest_items = cards
         # 4. 保存相同的筛选条件，用于“更多类似商品”；不继承工具自己的页码和每页条数。
@@ -107,10 +107,10 @@ def build_marketplace_tools(
         try:
             # 1. 用商品 ID 调用 Java 的只读详情接口。
             card = await client.get_listing(product_id)
-        except (JavaServiceError, ValueError) as exc:
+        except (JavaServiceError, ValueError) as exception:
             execution_context.latest_items = []
             execution_context.latest_search_filters = None
-            return json.dumps({"error": str(exc), "items": []}, ensure_ascii=False)
+            return json.dumps({"error": str(exception), "items": []}, ensure_ascii=False)
         # 2. 更新前端卡片，再把详情交回模型；已有搜索条件保持原样，便于继续浏览。
         execution_context.latest_items = [card] if card else []
         return _cards_json(execution_context.latest_items)

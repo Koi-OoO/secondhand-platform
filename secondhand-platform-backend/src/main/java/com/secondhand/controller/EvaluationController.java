@@ -45,13 +45,13 @@ public class EvaluationController {
                            @Parameter(description = "是否匿名评价，默认false", example = "false")
                            @RequestParam(defaultValue = "false") Boolean anonymous,  // 是否匿名，默认false
                            @Parameter(hidden = true) HttpSession session) {  // HttpSession对象，用于获取当前用户
-        // 从session中获取用户ID
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service层提交评价
+
+        // 2. 调用业务层，提交订单评价
         return evaluationService.evaluate(userId, orderId, rating, content, anonymous);
     }
 
@@ -68,7 +68,7 @@ public class EvaluationController {
                             @RequestParam(defaultValue = "1") Integer page,  // 页码，默认1
                             @Parameter(description = "每页条数", example = "12")
                             @RequestParam(defaultValue = "12") Integer size) {  // 每页条数，默认12
-        // 调用service层分页查询用户收到的评价
+        // 1. 调用业务层，分页查询用户收到的评价
         return evaluationService.getUserEvaluations(userId, page, size);
     }
 }

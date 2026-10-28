@@ -6,23 +6,29 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.secondhand.entity.Conversation;
+import com.secondhand.entity.MeetupProposal;
 import com.secondhand.entity.Message;
+import com.secondhand.entity.Order;
 import com.secondhand.entity.User;
 import com.secondhand.mapper.ConversationMapper;
+import com.secondhand.mapper.MeetupProposalMapper;
 import com.secondhand.mapper.MessageMapper;
+import com.secondhand.mapper.OrderMapper;
 import com.secondhand.mapper.UserMapper;
 import com.secondhand.service.MessageService;
 import com.secondhand.util.Result;
 import com.secondhand.websocket.ChatWebSocketHandler;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 私信服务实现类。
@@ -32,8 +38,10 @@ public class MessageServiceImpl implements MessageService {
 
     @Autowired  // 注入私信Mapper
     private MessageMapper messageMapper;
-    @Autowired private com.secondhand.mapper.MeetupProposalMapper meetupProposalMapper;
-    @Autowired private com.secondhand.mapper.OrderMapper orderMapper;
+    @Autowired  // 注入预约Mapper（聊天记录附带预约卡片）
+    private MeetupProposalMapper meetupProposalMapper;
+    @Autowired  // 注入订单Mapper（预约卡片展示当前订单状态）
+    private OrderMapper orderMapper;
     @Autowired  // 注入会话Mapper
     private ConversationMapper conversationMapper;
     @Autowired  // 注入用户Mapper（查对方昵称/头像、校验接收者存在）
@@ -45,21 +53,28 @@ public class MessageServiceImpl implements MessageService {
      * 发送私信
      */
     @Override
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     public Result send(Long fromUserId, Long toUserId, String content, Long productId) {
+        // 普通私信不允许携带预约卡片
         return sendInternal(fromUserId, toUserId, content, productId, null);
     }
 
     @Override
-    @org.springframework.transaction.annotation.Transactional
-    public void sendMeetupProposal(com.secondhand.entity.MeetupProposal proposal, Long productId) {
-        Result result = sendInternal(proposal.getSellerId(), proposal.getBuyerId(), "面交时间确认 · " + proposal.getOrderNo(), productId, proposal);
-        if (result.getCode() != 200) throw new IllegalStateException("预约卡片发送失败");
+    @Transactional
+    public void sendMeetupProposal(MeetupProposal proposal, Long productId) {
+        // 1. 以卖家身份向买家发送预约卡片
+        Result result = sendInternal(proposal.getSellerId(), proposal.getBuyerId(),
+                "面交时间确认 · " + proposal.getOrderNo(), productId, proposal);
+
+        // 2. 卡片发送失败时抛出异常，让预约事务回滚
+        if (result.getCode() != 200) {
+            throw new IllegalStateException("预约卡片发送失败");
+        }
     }
 
     private Result sendInternal(Long fromUserId, Long toUserId, String content, Long productId,
-                                com.secondhand.entity.MeetupProposal proposal) {
-        // 校验接收者
+                                MeetupProposal proposal) {
+        // 1. 校验接收者和消息内容
         if (toUserId == null) {
             return Result.error("请选择接收者");
         }
@@ -67,57 +82,68 @@ public class MessageServiceImpl implements MessageService {
         if (toUserId.equals(fromUserId)) {
             return Result.error("不能给自己发消息");
         }
-        // 校验内容非空
         if (content == null || content.trim().isEmpty()) {
             return Result.error("消息内容不能为空");
         }
-        // 接收者必须存在
+
+        // 2. 确认接收者存在
         User toUser = userMapper.selectById(toUserId);
         if (toUser == null) {
             return Result.error("接收者不存在");
         }
 
-        // 消息落库
-        Message msg = new Message();
-        msg.setFromUserId(fromUserId);  // 发送者
-        msg.setToUserId(toUserId);  // 接收者
-        msg.setProductId(productId);  // 关联商品（可空）
+        // 3. 保存消息；预约卡片同时保存预约引用
+        Message message = new Message();
+        message.setFromUserId(fromUserId);  // 发送者
+        message.setToUserId(toUserId);  // 接收者
+        message.setProductId(productId);  // 关联商品（可空）
         if (proposal != null) {
-            msg.setMeetupProposalId(proposal.getId()); msg.setMeetupProposal(proposal);
+            message.setMeetupProposalId(proposal.getId());
+            message.setMeetupProposal(proposal);
         }
-        msg.setContent(content.trim());  // 内容
-        msg.setIsRead(false);  // 默认未读
-        msg.setCreateTime(new Date());  // 创建时间
-        messageMapper.insert(msg);  // 插入（回填自增id）
-        upsertConversationAfterMessage(fromUserId, toUserId, productId, msg);
+        message.setContent(content.trim());  // 内容
+        message.setIsRead(false);  // 默认未读
+        message.setCreateTime(new Date());  // 创建时间
+        messageMapper.insert(message);  // 插入（回填自增id）
+        upsertConversationAfterMessage(fromUserId, toUserId, productId, message);
 
-        // 实时推送给接收方（在线才推，离线跳过；统一payload结构 {type,data}）
+        // 4. 事务提交后实时推送；接收方在线才推，预约卡片也回推给发送方
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "chat");  // 前端按type分发
-        payload.put("data", msg);  // 消息本体
+        payload.put("data", message);  // 消息本体
         String json = JSONUtil.toJsonStr(payload);
         Runnable push = () -> {
             try {
                 chatWebSocketHandler.sendToUser(toUserId, json);
-                if (proposal != null) chatWebSocketHandler.sendToUser(fromUserId, json);
-            } catch (Exception ignored) { /* 消息已保存，离线或推送失败可重新读取。 */ }
+                if (proposal != null) {
+                    chatWebSocketHandler.sendToUser(fromUserId, json);
+                }
+            } catch (Exception ignored) {
+                // 消息已保存，离线或推送失败可重新读取
+            }
         };
-        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
-            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                new org.springframework.transaction.support.TransactionSynchronization() {
-                    @Override public void afterCommit() { push.run(); }
-                });
-        } else push.run();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    push.run();
+                }
+            });
+        } else {
+            push.run();
+        }
 
-        return Result.success(msg);
+        // 5. 返回落库后的消息
+        return Result.success(message);
     }
 
     /**
      * 创建或获取会话。
      */
     @Override
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     public Result createOrGetConversation(Long userId, Long peerId, Long productId) {
+        // 1. 校验联系人
         if (peerId == null) {
             return Result.error("请选择联系人");
         }
@@ -125,17 +151,21 @@ public class MessageServiceImpl implements MessageService {
             return Result.error("不能给自己发送私信");
         }
 
+        // 2. 确认联系人存在
         User peer = userMapper.selectById(peerId);
         if (peer == null) {
             return Result.error("联系人不存在");
         }
 
-        // 唯一键配合原子写入处理“打开聊天”和“第一条消息”同时创建会话。
+        // 3. 原子创建或复用会话，唯一键处理并发创建
         Conversation candidate = newConversation(userId, peerId, productId, new Date());
         conversationMapper.ensureExists(candidate);
         Conversation conversation = findConversation(userId, peerId);
-        if (conversation == null) throw new IllegalStateException("会话创建后未能读取");
+        if (conversation == null) {
+            throw new IllegalStateException("会话创建后未能读取");
+        }
 
+        // 4. 返回会话摘要
         return Result.success(toConversationItem(conversation, peer, null, 0));
     }
 
@@ -144,7 +174,10 @@ public class MessageServiceImpl implements MessageService {
      */
     @Override
     public Result getConversations(Long userId) {
+        // 1. 查询包含空会话的会话摘要
         List<Map<String, Object>> summaries = conversationMapper.selectConversationSummaries(userId);
+
+        // 2. 没有会话时返回空列表
         return Result.success(summaries != null ? summaries : Collections.emptyList());
     }
 
@@ -153,20 +186,18 @@ public class MessageServiceImpl implements MessageService {
      */
     @Override
     public Result getChat(Long userId, Long peerId, Integer page, Integer size) {
-        // 参数校验
+        // 1. 校验对方用户ID，规范页码和每页条数
         if (peerId == null) {
             return Result.error("参数错误");
         }
-        // 页码默认1
         if (page == null || page < 1) {
             page = 1;
         }
-        // 每页条数默认20
         if (size == null || size < 1) {
             size = 20;
         }
 
-        // 1. 打开会话即已读：把对方发给我、仍未读的消息标记为已读
+        // 2. 打开会话即已读：把对方发给我、仍未读的消息标记为已读
         LambdaUpdateWrapper<Message> readWrapper = new LambdaUpdateWrapper<>();
         readWrapper.eq(Message::getFromUserId, peerId)
                 .eq(Message::getToUserId, userId)
@@ -174,40 +205,69 @@ public class MessageServiceImpl implements MessageService {
                 .set(Message::getIsRead, true);
         messageMapper.update(null, readWrapper);
 
-        // 2. 分页查询双方往来消息：(我->对方) 或 (对方->我)，按id倒序（最新在前）
+        // 3. 分页查询双方往来消息：(我->对方) 或 (对方->我)，按id倒序
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
-        wrapper.nested(w -> w.eq(Message::getFromUserId, userId).eq(Message::getToUserId, peerId))
+        wrapper.nested(condition -> condition.eq(Message::getFromUserId, userId)
+                        .eq(Message::getToUserId, peerId))
                 .or()
-                .nested(w -> w.eq(Message::getFromUserId, peerId).eq(Message::getToUserId, userId))
+                .nested(condition -> condition.eq(Message::getFromUserId, peerId)
+                        .eq(Message::getToUserId, userId))
                 .orderByDesc(Message::getId);
-        Page<Message> pageObj = new Page<>(page, size);
-        IPage<Message> result = messageMapper.selectPage(pageObj, wrapper);
+        Page<Message> pageRequest = new Page<>(page, size);
+        IPage<Message> pageResult = messageMapper.selectPage(pageRequest, wrapper);
 
-        // 批量附带可信卡片数据，避免每条消息单独查询。
-        List<Long> proposalIds = result.getRecords().stream().map(Message::getMeetupProposalId)
-                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        // 4. 批量查询消息引用的预约卡片，并补充订单状态
+        List<Long> proposalIds = new ArrayList<>();
+        for (Message message : pageResult.getRecords()) {
+            Long proposalId = message.getMeetupProposalId();
+            if (proposalId != null && !proposalIds.contains(proposalId)) {
+                proposalIds.add(proposalId);
+            }
+        }
         if (!proposalIds.isEmpty()) {
-            Map<Long, com.secondhand.entity.MeetupProposal> proposalMap = meetupProposalMapper.selectBatchIds(proposalIds).stream()
-                    .collect(Collectors.toMap(com.secondhand.entity.MeetupProposal::getId, p -> p));
-            List<Long> orderIds = proposalMap.values().stream().map(com.secondhand.entity.MeetupProposal::getOrderId).distinct().collect(Collectors.toList());
-            Map<Long, com.secondhand.entity.Order> orderMap = orderIds.isEmpty() ? Collections.emptyMap() : orderMapper.selectBatchIds(orderIds).stream()
-                    .collect(Collectors.toMap(com.secondhand.entity.Order::getId, o -> o));
-            for (Message msg : result.getRecords()) {
-                com.secondhand.entity.MeetupProposal p = proposalMap.get(msg.getMeetupProposalId());
-                if (p == null) continue;
-                com.secondhand.entity.Order order = orderMap.get(p.getOrderId());
-                p.setOrderStatus(order == null ? null : order.getStatus());
-                p.setCurrentMeetupTime(order == null ? null : order.getMeetupTime());
-                msg.setMeetupProposal(p);
+            List<MeetupProposal> proposals = meetupProposalMapper.selectBatchIds(proposalIds);
+            Map<Long, MeetupProposal> proposalMap = new LinkedHashMap<>();
+            for (MeetupProposal proposal : proposals) {
+                proposalMap.put(proposal.getId(), proposal);
+            }
+
+            List<Long> orderIds = new ArrayList<>();
+            for (MeetupProposal proposal : proposals) {
+                if (!orderIds.contains(proposal.getOrderId())) {
+                    orderIds.add(proposal.getOrderId());
+                }
+            }
+            Map<Long, Order> orderMap = new LinkedHashMap<>();
+            if (!orderIds.isEmpty()) {
+                List<Order> orders = orderMapper.selectBatchIds(orderIds);
+                for (Order order : orders) {
+                    orderMap.put(order.getId(), order);
+                }
+            }
+
+            for (Message message : pageResult.getRecords()) {
+                MeetupProposal proposal = proposalMap.get(message.getMeetupProposalId());
+                if (proposal == null) {
+                    continue;
+                }
+                Order order = orderMap.get(proposal.getOrderId());
+                if (order == null) {
+                    proposal.setOrderStatus(null);
+                    proposal.setCurrentMeetupTime(null);
+                } else {
+                    proposal.setOrderStatus(order.getStatus());
+                    proposal.setCurrentMeetupTime(order.getMeetupTime());
+                }
+                message.setMeetupProposal(proposal);
             }
         }
 
-        // 3. 组装分页结果
+        // 5. 组装分页结果
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("records", result.getRecords());  // 消息列表
-        data.put("total", result.getTotal());  // 总条数
-        data.put("current", result.getCurrent());  // 当前页
-        data.put("pages", result.getPages());  // 总页数
+        data.put("records", pageResult.getRecords());  // 消息列表
+        data.put("total", pageResult.getTotal());  // 总条数
+        data.put("current", pageResult.getCurrent());  // 当前页
+        data.put("pages", pageResult.getPages());  // 总页数
         return Result.success(data);
     }
 
@@ -216,10 +276,12 @@ public class MessageServiceImpl implements MessageService {
      */
     @Override
     public Result getUnreadCount(Long userId) {
-        // 统计条件：接收者是我 + 未读
+        // 1. 统计接收者是我且未读的消息
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Message::getToUserId, userId)
                 .eq(Message::getIsRead, false);
+
+        // 2. 返回未读总数
         Long count = messageMapper.selectCount(wrapper);
         return Result.success(count);
     }
@@ -229,33 +291,44 @@ public class MessageServiceImpl implements MessageService {
      */
     @Override
     public Result getOnlineStatus(List<Long> userIds) {
+        // 1. 没有查询条件时返回空结果
         Map<Long, Map<String, Object>> statusMap = new LinkedHashMap<>();
         if (userIds == null || userIds.isEmpty()) {
             return Result.success(statusMap);
         }
 
-        List<Long> ids = userIds.stream()
-                .filter(Objects::nonNull)
-                .filter(id -> id > 0)
-                .distinct()
-                .collect(Collectors.toList());
-        for (Long id : ids) {
+        // 2. 过滤空值和非正数，并按传入顺序去重
+        List<Long> validUserIds = new ArrayList<>();
+        for (Long userId : userIds) {
+            if (userId != null && userId > 0 && !validUserIds.contains(userId)) {
+                validUserIds.add(userId);
+            }
+        }
+
+        // 3. 逐个查询在线状态和最后活跃时间
+        for (Long userId : validUserIds) {
             Map<String, Object> status = new LinkedHashMap<>();
-            status.put("online", chatWebSocketHandler.isOnline(id));
-            status.put("lastActiveTime", chatWebSocketHandler.getLastActiveTime(id));
-            statusMap.put(id, status);
+            status.put("online", chatWebSocketHandler.isOnline(userId));
+            status.put("lastActiveTime", chatWebSocketHandler.getLastActiveTime(userId));
+            statusMap.put(userId, status);
         }
         return Result.success(statusMap);
     }
 
     private void upsertConversationAfterMessage(Long fromUserId, Long toUserId, Long productId, Message message) {
+        // 1. 按双方用户和商品构造会话摘要
         Conversation conversation = newConversation(fromUserId, toUserId, productId, message.getCreateTime());
         conversation.setLastMessageId(message.getId());
+
+        // 2. 原子写入；并发时只保留更大的消息ID
         conversationMapper.upsertAfterMessage(conversation);
     }
 
     private Conversation newConversation(Long userId, Long peerId, Long productId, Date lastTime) {
+        // 1. 规范化双方用户顺序，保证同一对用户只有一条会话
         UserPair pair = normalizePair(userId, peerId);
+
+        // 2. 组装会话的初始字段
         Date now = new Date();
         Conversation conversation = new Conversation();
         conversation.setUser1Id(pair.user1Id);
@@ -273,13 +346,15 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private UserPair normalizePair(Long userId, Long peerId) {
+        // 较小的用户ID固定放在 user1Id，避免同一对用户生成两条会话
         if (userId < peerId) {
             return new UserPair(userId, peerId);
         }
         return new UserPair(peerId, userId);
     }
 
-    private Map<String, Object> toConversationItem(Conversation conversation, User peer, Message last, int unreadCount) {
+    private Map<String, Object> toConversationItem(Conversation conversation, User peer, Message lastMessage,
+                                                   int unreadCount) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("conversationId", conversation.getId());
         item.put("peerId", peer.getId());
@@ -287,9 +362,9 @@ public class MessageServiceImpl implements MessageService {
         item.put("peerUsername", peer.getUsername());
         item.put("peerAvatar", peer.getAvatar());
         item.put("productId", conversation.getProductId());
-        item.put("lastId", last != null ? last.getId() : conversation.getLastMessageId());
-        item.put("lastContent", last != null ? last.getContent() : null);
-        item.put("lastTime", last != null ? last.getCreateTime() : conversation.getLastTime());
+        item.put("lastId", lastMessage != null ? lastMessage.getId() : conversation.getLastMessageId());
+        item.put("lastContent", lastMessage != null ? lastMessage.getContent() : null);
+        item.put("lastTime", lastMessage != null ? lastMessage.getCreateTime() : conversation.getLastTime());
         item.put("unreadCount", unreadCount);
         return item;
     }

@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-/** HTTP client for the internal Python AI service. */
+/** 调用内部 Python AI 服务的 HTTP 客户端。 */
 @Component
 public class AiServiceClient {
     private final RestTemplate restTemplate;
@@ -25,24 +25,27 @@ public class AiServiceClient {
 
     @Autowired
     public AiServiceClient(RestTemplateBuilder builder, AiServiceProperties properties) {
+        // 用配置中的连接和读取超时构建同步 HTTP 客户端
         this(builder
                 .setConnectTimeout(Duration.ofMillis(Math.max(1, properties.getConnectTimeoutMs())))
                 .setReadTimeout(Duration.ofMillis(Math.max(1, properties.getReadTimeoutMs())))
                 .build(), properties);
     }
 
-    /** Constructor used by focused unit tests with a bound MockRestServiceServer. */
+    /** 单元测试使用绑定 MockRestServiceServer 的构造器。 */
     AiServiceClient(RestTemplate restTemplate, AiServiceProperties properties) {
         this.restTemplate = restTemplate;
         this.properties = properties;
     }
 
     public AiChatResponse chat(AiChatRequest request, User user, String traceId) {
+        // 1. 校验 AI 服务地址
         String baseUrl = properties.getBaseUrl();
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new AiServiceUnavailableException();
         }
 
+        // 2. 组装会话消息、用户上下文和链路ID
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("conversationId", request.getConversationId());
         payload.put("message", request.getMessage());
@@ -54,12 +57,14 @@ public class AiServiceClient {
         payload.put("userContext", userContext);
         payload.put("traceId", traceId);
 
+        // 3. 设置内部服务令牌和追踪头
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Internal-Service-Token", properties.getInternalToken());
         headers.set("X-Trace-Id", traceId);
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
 
+        // 4. 调用 Python 内部接口，非2xx或空响应都视为服务不可用
         String endpoint = baseUrl.replaceAll("/+$", "") + "/internal/agent/chat";
         try {
             ResponseEntity<AiChatResponse> response = restTemplate.exchange(
@@ -68,12 +73,12 @@ public class AiServiceClient {
                 throw new AiServiceUnavailableException();
             }
             return response.getBody();
-        } catch (RestClientException ex) {
-            throw new AiServiceUnavailableException(ex);
+        } catch (RestClientException exception) {
+            throw new AiServiceUnavailableException(exception);
         }
     }
 
-    /** Stable exception translated by the public controller. */
+    /** 统一对外表示 AI 服务不可用，由公开控制器转换为友好提示。 */
     public static class AiServiceUnavailableException extends RuntimeException {
         public AiServiceUnavailableException() {
             super("AI 服务暂时不可用");

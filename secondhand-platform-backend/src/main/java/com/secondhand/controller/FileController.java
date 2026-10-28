@@ -32,7 +32,7 @@ public class FileController {
     @Operation(summary = "上传单张图片", description = "需要登录，上传一张商品图片；Result.data 返回图片访问URL")  // Swagger接口说明
     public Result upload(@Parameter(description = "图片文件，表单字段名固定为 file", required = true)
                          @RequestParam("file") MultipartFile file) {  // 接收上传的文件，参数名为file
-        // 调用service层处理单文件上传
+        // 调用业务层，处理单文件上传
         return fileService.uploadImage(file);
     }
 
@@ -43,7 +43,7 @@ public class FileController {
     @Operation(summary = "批量上传图片", description = "需要登录，一次最多上传9张商品图片；Result.data 返回图片访问URL列表")  // Swagger接口说明
     public Result uploadBatch(@Parameter(description = "图片文件列表，表单字段名固定为 files，一次最多9张", required = true)
                               @RequestParam("files") List<MultipartFile> files) {  // 接收多个文件，参数名为files
-        // 调用service层处理批量上传
+        // 调用业务层，处理批量上传
         return fileService.uploadBatch(files);
     }
 }

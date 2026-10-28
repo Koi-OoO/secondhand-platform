@@ -40,7 +40,7 @@ public class ProductController {
     private FavoriteService favoriteService;
 
     /**
-     * 商品分页查询（支持多条件筛选）
+     * MySQL商品分页查询兼容入口；商品广场全文搜索使用 /product/search。
      */
     @GetMapping("/page")  // GET请求，路径 /product/page
     @Operation(summary = "搜索商品", description = "公开接口，支持按分类、卖家、关键字、价格区间、成色和排序方式筛选商品")
@@ -105,9 +105,11 @@ public class ProductController {
             @Parameter(description = "每页条数", example = "12")
             @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
             @Parameter(hidden = true) HttpSession session) {  // HttpSession，用于获取当前查看者ID
-        // 获取当前查看者ID（可能为null，表示未登录访客）
+
+        // 1. 获取查看者身份，未登录访客为null
         Long viewerId = SessionUtil.getUserId(session);
-        // 调用service查询卖家商品
+
+        // 2. 按查看者身份查询卖家商品
         return productService.getSellerProducts(sellerId, page, size, viewerId);
     }
 
@@ -123,13 +125,15 @@ public class ProductController {
                     content = @Content(schema = @Schema(implementation = Product.class)))
             @RequestBody Product product,  // 商品信息，从请求体获取
             @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service发布商品
+
+        // 2. 调用业务层，发布商品
         return productService.publish(userId, product, product.getImageUrls());
     }
 
@@ -145,13 +149,15 @@ public class ProductController {
                     content = @Content(schema = @Schema(implementation = Product.class)))
             @RequestBody Product product,  // 商品信息（包含要修改的字段）
             @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service更新商品
+
+        // 2. 调用业务层，更新商品
         return productService.update(userId, product);
     }
 
@@ -163,13 +169,15 @@ public class ProductController {
     public Result offShelf(@Parameter(description = "商品ID", example = "100", required = true)
                            @PathVariable Long id,  // 商品ID，从路径获取
                            @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service下架商品
+
+        // 2. 调用业务层，下架商品
         return productService.offShelf(userId, id);
     }
 
@@ -181,13 +189,15 @@ public class ProductController {
     public Result onShelf(@Parameter(description = "商品ID", example = "100", required = true)
                           @PathVariable Long id,  // 商品ID，从路径获取
                           @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service上架商品
+
+        // 2. 调用业务层，上架商品
         return productService.onShelf(userId, id);
     }
 
@@ -199,13 +209,15 @@ public class ProductController {
     public Result addFavorite(@Parameter(description = "商品ID", example = "100", required = true)
                               @PathVariable Long id,  // 商品ID
                               @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service添加收藏
+
+        // 2. 调用业务层，添加收藏
         return favoriteService.addFavorite(userId, id);
     }
 
@@ -217,13 +229,15 @@ public class ProductController {
     public Result removeFavorite(@Parameter(description = "商品ID", example = "100", required = true)
                                  @PathVariable Long id,  // 商品ID
                                  @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service取消收藏
+
+        // 2. 调用业务层，取消收藏
         return favoriteService.removeFavorite(userId, id);
     }
 
@@ -237,13 +251,15 @@ public class ProductController {
                               @Parameter(description = "每页条数", example = "12")
                               @RequestParam(defaultValue = "12") Integer size,  // 每页条数，默认12
                               @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service查询我的收藏
+
+        // 2. 调用业务层，查询本人收藏
         return favoriteService.getMyFavorites(userId, page, size);
     }
 
@@ -255,13 +271,15 @@ public class ProductController {
     public Result favoriteStatus(@Parameter(description = "商品ID", example = "100", required = true)
                                  @PathVariable Long id,  // 商品ID
                                  @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service查询收藏状态
+
+        // 2. 调用业务层，查询本人收藏状态
         return favoriteService.isFavorited(userId, id);
     }
 
@@ -277,13 +295,15 @@ public class ProductController {
                          @Parameter(description = "举报详情，可选", example = "图片和描述不一致")
                          @RequestParam(required = false) String detail,  // 举报详情，可选
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
-        // 获取当前登录用户ID
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 调用service举报商品
+
+        // 2. 调用业务层，返回举报功能暂未开放的提示
         return productService.reportProduct(userId, id, reason, detail);
     }
 
@@ -295,10 +315,14 @@ public class ProductController {
     public Result delete(@Parameter(description = "商品ID", example = "100", required = true)
                          @PathVariable Long id,  // 商品ID
                          @Parameter(hidden = true) HttpSession session) {  // HttpSession获取当前用户
+
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
         if (userId == null) {
             return Result.error("未登录");
         }
+
+        // 2. 调用业务层，软删除本人商品
         return productService.deleteProduct(userId, id);
     }
 }

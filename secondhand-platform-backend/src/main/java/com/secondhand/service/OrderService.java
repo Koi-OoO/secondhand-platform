@@ -10,9 +10,11 @@ import java.util.List;
  * 确认收到、批量处理以及历史记录隐藏等场景。
  */
 public interface OrderService {
+    /** 卖家提醒买家核实收货，同一订单每24小时最多提醒一次。 */
     Result remindBuyer(Long sellerId, Long orderId);
-    Result reportDeliveryIssue(Long buyerId, Long orderId, String issue);
 
+    /** 买家反馈交付问题，将待确认订单转为交易待协商。 */
+    Result reportDeliveryIssue(Long buyerId, Long orderId, String issue);
 
     /** 卖家接单：待接单进入待面交，不再次扣库存。 */
     Result acceptOrder(Long sellerId, Long orderId);
@@ -20,6 +22,7 @@ public interface OrderService {
     /** 查询当前用户与指定对方之间的订单，遵守本人隐藏标记。 */
     Result getOrdersWithUser(Long userId, Long peerId, Integer page, Integer size);
 
+    /** 查询订单详情，仅订单买卖双方有权查看。 */
     Result getOrderDetail(Long userId, Long orderId);
 
     /**
@@ -28,7 +31,7 @@ public interface OrderService {
      * @param buyerId 买家用户 ID
      * @param productId 商品 ID
      * @param quantity 购买数量
-     * @param address 面交地点
+     * @param address 买家确认的商品面交地点，用于核对地点是否已变更
      * @return Result 下单结果
      */
     Result createOrder(Long buyerId, Long productId, Integer quantity, String address);
@@ -127,7 +130,7 @@ public interface OrderService {
     Result confirmOrder(Long buyerId, Long orderId);
 
     /**
-     * 卖家拒绝交付并回滚库存
+     * 卖家拒绝接单或取消待面交交易，并回补商品库存
      *
      * @param sellerId 卖家用户 ID
      * @param orderId 订单 ID

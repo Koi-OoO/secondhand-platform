@@ -32,21 +32,30 @@ public class ProductSearchController {
             @RequestParam(required = false) Integer categoryId, @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice, @RequestParam(required = false) Integer conditionLevel,
             @RequestParam(defaultValue = "relevance") String sort) {
+        // 1. 组装并校验搜索条件
         ProductSearchCriteria criteria = new ProductSearchCriteria(page, size, keyword, categoryId,
                 minPrice, maxPrice, conditionLevel, sort);
-        ProductSearchService available = service.getIfAvailable();
-        if (available == null) return ResponseEntity.status(503).body(Result.error("商品全文搜索尚未启用"));
-        return ResponseEntity.ok(Result.success(available.search(criteria)));
+
+        // 2. ES 未启用时明确返回 503，避免误报为空结果
+        ProductSearchService availableService = service.getIfAvailable();
+        if (availableService == null) {
+            return ResponseEntity.status(503).body(Result.error("商品全文搜索尚未启用"));
+        }
+
+        // 3. 执行搜索并返回结果
+        return ResponseEntity.ok(Result.success(availableService.search(criteria)));
     }
 
     @ExceptionHandler({IllegalArgumentException.class, MethodArgumentTypeMismatchException.class})
-    public ResponseEntity<Result> invalidQuery(Exception ex) {
-        String message = ex instanceof MethodArgumentTypeMismatchException ? "搜索参数格式不正确" : ex.getMessage();
+    public ResponseEntity<Result> invalidQuery(Exception exception) {
+        // 参数类型错误统一提示格式问题，业务校验错误沿用具体原因
+        String message = exception instanceof MethodArgumentTypeMismatchException
+                ? "搜索参数格式不正确" : exception.getMessage();
         return ResponseEntity.badRequest().body(Result.error(message));
     }
 
     @ExceptionHandler(ProductSearchUnavailableException.class)
-    public ResponseEntity<Result> unavailable(ProductSearchUnavailableException ex) {
-        return ResponseEntity.status(503).body(Result.error(ex.getMessage()));
+    public ResponseEntity<Result> unavailable(ProductSearchUnavailableException exception) {
+        return ResponseEntity.status(503).body(Result.error(exception.getMessage()));
     }
 }

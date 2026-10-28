@@ -4,6 +4,7 @@ import com.secondhand.entity.BatchOperationResult;
 import com.secondhand.entity.Order;
 import com.secondhand.entity.OrderBatchShipItem;
 import com.secondhand.entity.Product;
+import com.secondhand.entity.ProductImage;
 import com.secondhand.entity.Evaluation;
 import com.secondhand.mapper.EvaluationMapper;
 import com.secondhand.mapper.OrderMapper;
@@ -23,6 +24,9 @@ import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -571,6 +575,51 @@ class OrderServiceImplTest {
         when(evaluations.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
         service.getMyBoughtOrders(20L, 1, 12);
         assertThat(ReflectionTestUtils.getField(order, "evaluated")).isEqualTo(false);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = "/first.jpg")
+    void orderListKeepsFirstImageAndPrefersOrderSnapshot(String firstImageUrl) {
+        // 1. 准备旧订单、有快照的订单和没有图片的商品订单
+        Order legacyOrder = completedOrder(10L, 20L, 30L);
+        legacyOrder.setStatus(1);
+        Order snapshotOrder = completedOrder(11L, 20L, 30L);
+        snapshotOrder.setStatus(1);
+        snapshotOrder.setSnapshotTitle("下单时的商品名称");
+        snapshotOrder.setSnapshotImage("/snapshot.jpg");
+        Order noImageOrder = completedOrder(12L, 20L, 30L);
+        noImageOrder.setStatus(1);
+        noImageOrder.setProductId(41L);
+        when(orderMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenAnswer(invocation -> {
+            IPage<Order> page = invocation.getArgument(0);
+            page.setRecords(Arrays.asList(legacyOrder, snapshotOrder, noImageOrder));
+            page.setTotal(3);
+            return page;
+        });
+        when(productMapper.selectBatchIds(any())).thenReturn(Arrays.asList(
+                product(40L, 30L, 1, BigDecimal.TEN), product(41L, 30L, 1, BigDecimal.TEN)));
+
+        // 图片查询已经按sort排序，首图URL即使为空也不能被后续图片覆盖。
+        ProductImage firstImage = new ProductImage();
+        firstImage.setProductId(40L);
+        firstImage.setUrl(firstImageUrl);
+        ProductImage laterImage = new ProductImage();
+        laterImage.setProductId(40L);
+        laterImage.setUrl("/later.jpg");
+        when(productImageMapper.selectByProductIds(any())).thenReturn(Arrays.asList(firstImage, laterImage));
+        when(userMapper.selectBatchIds(any())).thenReturn(Collections.emptyList());
+
+        // 2. 通过实际列表入口组装订单信息
+        Result result = service.getMyBoughtOrders(20L, 1, 12);
+
+        // 3. 核对首图、快照优先级和无图片的情况，保持一次批量查询
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(legacyOrder.getProductImage()).isEqualTo(firstImageUrl);
+        assertThat(snapshotOrder.getProductTitle()).isEqualTo("下单时的商品名称");
+        assertThat(snapshotOrder.getProductImage()).isEqualTo("/snapshot.jpg");
+        assertThat(noImageOrder.getProductImage()).isNull();
+        verify(productImageMapper).selectByProductIds(any());
     }
 
     @Test

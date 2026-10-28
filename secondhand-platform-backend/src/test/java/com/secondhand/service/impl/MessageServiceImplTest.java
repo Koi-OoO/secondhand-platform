@@ -4,10 +4,14 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.secondhand.entity.Conversation;
+import com.secondhand.entity.MeetupProposal;
 import com.secondhand.entity.Message;
+import com.secondhand.entity.Order;
 import com.secondhand.entity.User;
 import com.secondhand.mapper.ConversationMapper;
+import com.secondhand.mapper.MeetupProposalMapper;
 import com.secondhand.mapper.MessageMapper;
+import com.secondhand.mapper.OrderMapper;
 import com.secondhand.mapper.UserMapper;
 import com.secondhand.util.Result;
 import com.secondhand.websocket.ChatWebSocketHandler;
@@ -37,6 +41,8 @@ import static org.mockito.Mockito.when;
 class MessageServiceImplTest {
 
     private MessageMapper messageMapper;
+    private MeetupProposalMapper meetupProposalMapper;
+    private OrderMapper orderMapper;
     private ConversationMapper conversationMapper;
     private UserMapper userMapper;
     private ChatWebSocketHandler chatWebSocketHandler;
@@ -54,11 +60,15 @@ class MessageServiceImplTest {
     void setUp() {
         // 手动mock依赖并通过反射注入（与项目现有Service测试一致）
         messageMapper = mock(MessageMapper.class);
+        meetupProposalMapper = mock(MeetupProposalMapper.class);
+        orderMapper = mock(OrderMapper.class);
         conversationMapper = mock(ConversationMapper.class);
         userMapper = mock(UserMapper.class);
         chatWebSocketHandler = mock(ChatWebSocketHandler.class);
         service = new MessageServiceImpl();
         ReflectionTestUtils.setField(service, "messageMapper", messageMapper);
+        ReflectionTestUtils.setField(service, "meetupProposalMapper", meetupProposalMapper);
+        ReflectionTestUtils.setField(service, "orderMapper", orderMapper);
         ReflectionTestUtils.setField(service, "conversationMapper", conversationMapper);
         ReflectionTestUtils.setField(service, "userMapper", userMapper);
         ReflectionTestUtils.setField(service, "chatWebSocketHandler", chatWebSocketHandler);
@@ -257,6 +267,37 @@ class MessageServiceImplTest {
         verify(messageMapper).update(any(), any());
         // 再分页查询双方往来消息
         verify(messageMapper).selectPage(any(), any());
+    }
+
+    @Test
+    void getChatAttachesMeetupProposalWithCurrentOrderStatus() {
+        Date meetupTime = new Date(1700000000000L);
+        Message message = new Message();
+        message.setId(30L);
+        message.setMeetupProposalId(5L);
+        Page<Message> page = new Page<>(1, 20);
+        page.setRecords(Collections.singletonList(message));
+
+        MeetupProposal proposal = new MeetupProposal();
+        proposal.setId(5L);
+        proposal.setOrderId(10L);
+        Order order = new Order();
+        order.setId(10L);
+        order.setStatus(3);
+        order.setMeetupTime(meetupTime);
+
+        when(messageMapper.selectPage(any(), any())).thenReturn(page);
+        when(meetupProposalMapper.selectBatchIds(Collections.singletonList(5L)))
+                .thenReturn(Collections.singletonList(proposal));
+        when(orderMapper.selectBatchIds(Collections.singletonList(10L)))
+                .thenReturn(Collections.singletonList(order));
+
+        Result result = service.getChat(1L, 2L, 1, 20);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(message.getMeetupProposal()).isSameAs(proposal);
+        assertThat(proposal.getOrderStatus()).isEqualTo(3);
+        assertThat(proposal.getCurrentMeetupTime()).isEqualTo(meetupTime);
     }
 
     @Test

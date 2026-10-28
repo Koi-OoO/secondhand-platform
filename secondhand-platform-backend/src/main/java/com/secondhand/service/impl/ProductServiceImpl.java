@@ -11,6 +11,7 @@ import com.secondhand.mapper.ProductMapper;
 import com.secondhand.service.ProductService;
 import com.secondhand.util.CacheUtil;
 import com.secondhand.util.Result;
+import com.secondhand.websocket.ProductChangePublisher;
 import com.secondhand.search.ProductSearchCriteria;
 import com.secondhand.search.ProductSearchService;
 import com.secondhand.search.ProductSearchUnavailableException;
@@ -81,10 +82,13 @@ public class ProductServiceImpl implements ProductService {
     @Autowired  // 注入缓存工具类
     private CacheUtil cacheUtil;
     @Autowired
-    private com.secondhand.websocket.ProductChangePublisher productChanges;
+    private ProductChangePublisher productChanges;
 
-    private void productChanged(Long id) {
-        if (productChanges != null) productChanges.publish(id);
+    /** 发布商品变更事件，供页面重新查询库存和状态。 */
+    private void productChanged(Long productId) {
+        if (productChanges != null) {
+            productChanges.publish(productId);
+        }
     }
 
     // 仅控制商品详情的缓存读写；关闭后仍保留浏览统计和交易锁。
@@ -104,34 +108,7 @@ public class ProductServiceImpl implements ProductService {
                                String keyword, BigDecimal minPrice,
                                BigDecimal maxPrice, Integer conditionLevel,
                                String sort) {
-        return pageProductsInternal(page, size, sellerId, categoryId, keyword,
-                minPrice, maxPrice, conditionLevel, sort, true);
-    }
-
-    /**
-     * 为 AI 查询商品分页结果，不记录热搜词。
-     */
-    @Override
-    public Result pageProductsForAi(Integer page, Integer size, Integer categoryId,
-                                    String keyword, BigDecimal minPrice,
-                                    BigDecimal maxPrice, Integer conditionLevel,
-                                    String sort) {
-        ProductSearchCriteria criteria = new ProductSearchCriteria(page, size, keyword, categoryId,
-                minPrice, maxPrice, conditionLevel, sort);
-        ProductSearchService search = productSearchService.getIfAvailable();
-        if (search == null) throw new ProductSearchUnavailableException("商品全文搜索尚未启用", null);
-        return Result.success(search.search(criteria));
-    }
-
-    /**
-     * 分页查询商品列表内部实现。
-     */
-    private Result pageProductsInternal(Integer page, Integer size,
-                                        Long sellerId, Integer categoryId,
-                                        String keyword, BigDecimal minPrice,
-                                        BigDecimal maxPrice, Integer conditionLevel,
-                                        String sort, boolean recordHotKeyword) {
-        // 分页参数校正：页码默认1
+        // 1. 校正分页参数，默认每页12条，最多50条
         if (page == null || page < 1) {
             page = 1;
         }
@@ -144,14 +121,14 @@ public class ProductServiceImpl implements ProductService {
             size = 50;
         }
 
-        // 有搜索关键词时，更新热搜榜（ZSet结构，搜索一次分数+1）
-        if (recordHotKeyword && keyword != null && !keyword.trim().isEmpty()) {
+        // 2. 有关键词时增加热搜分数
+        if (keyword != null && !keyword.trim().isEmpty()) {
             redisTemplate.opsForZSet().incrementScore(HOT_KEYWORD_KEY, keyword.trim(), 1);
         }
 
-        // 构建分页对象
+        // 3. 按筛选条件查询MySQL商品分页
         Page<Product> pageObj = new Page<>(page, size);
-        // 商品状态：卖家查全部，访客查在售（status=1）
+        // 传入卖家ID时查询其全部状态，否则只查询在售商品。
         Integer status = sellerId != null ? null : 1;
         // 执行多条件分页查询
         IPage<Product> result = productMapper.selectPageWithDetails(
@@ -159,12 +136,35 @@ public class ProductServiceImpl implements ProductService {
                 conditionLevel, status, sort
         );
 
-        // 查询结果不为空时，批量填充商品图片
+        // 4. 批量补齐商品图片
         if (!result.getRecords().isEmpty()) {
             fillImages(result.getRecords());
         }
 
+        // 5. 返回分页结果
         return Result.success(result);
+    }
+
+    /**
+     * 为 AI 查询商品分页结果，不记录热搜词。
+     */
+    @Override
+    public Result pageProductsForAi(Integer page, Integer size, Integer categoryId,
+                                    String keyword, BigDecimal minPrice,
+                                    BigDecimal maxPrice, Integer conditionLevel,
+                                    String sort) {
+        // 1. 校验并组装搜索条件
+        ProductSearchCriteria criteria = new ProductSearchCriteria(page, size, keyword, categoryId,
+                minPrice, maxPrice, conditionLevel, sort);
+
+        // 2. 获取ES搜索服务，未启用时明确报错，不回退到MySQL
+        ProductSearchService search = productSearchService.getIfAvailable();
+        if (search == null) {
+            throw new ProductSearchUnavailableException("商品全文搜索尚未启用", null);
+        }
+
+        // 3. 查询ES并返回结果，不记录热搜词
+        return Result.success(search.search(criteria));
     }
 
     /**
@@ -187,28 +187,45 @@ public class ProductServiceImpl implements ProductService {
      * 查询商品详情内部实现。
      */
     private Result getDetailInternal(Long productId, boolean recordViewCount) {
-        // 商品ID校验
+        // 1. 校验商品ID
         if (productId == null || productId <= 0) {
             return Result.error("商品 ID 无效");
         }
-        // 开启时使用逻辑过期缓存；关闭时复用同一数据库加载器进行对照测试。
-        Product product = productDetailCacheEnabled ? cacheUtil.queryWithLogicalExpire(
-                PRODUCT_CACHE_KEY, productId, Product.class,
-                this::loadProductDetail,  // 缓存未命中时的回源加载器
-                DETAIL_LOGIC_TTL,
-                DETAIL_PHYSIC_TTL + (long) (Math.random() * DETAIL_TTL_JITTER))
-                : loadProductDetail(productId);
-        // 商品不存在、已删除，或 AI 查询时商品不是在售状态
-        boolean invisible = recordViewCount
-                ? (product != null && product.getStatus() != null && product.getStatus() == 4)
-                : (product != null && !Integer.valueOf(1).equals(product.getStatus()));
-        if (product == null || invisible) {
+
+        // 2. 根据开关读取缓存，或直接查询数据库
+        Product product;
+        if (productDetailCacheEnabled) {
+            product = cacheUtil.queryWithLogicalExpire(
+                    PRODUCT_CACHE_KEY, productId, Product.class,
+                    this::loadProductDetail, // 缓存未命中时复用同一数据库加载器
+                    DETAIL_LOGIC_TTL,
+                    DETAIL_PHYSIC_TTL + (long) (Math.random() * DETAIL_TTL_JITTER));
+        } else {
+            product = loadProductDetail(productId);
+        }
+
+        // 3. 校验商品是否允许当前查询入口查看
+        if (product == null) {
             return Result.error("商品不存在");
         }
-        // 增加浏览量（异步，写Redis）
+        boolean invisible;
+        if (recordViewCount) {
+            // 普通详情不展示已删除商品，仍允许查看下架或售罄商品。
+            invisible = Integer.valueOf(4).equals(product.getStatus());
+        } else {
+            // AI只查询在售商品，不展示下架、售罄或缺少状态的商品。
+            invisible = !Integer.valueOf(1).equals(product.getStatus());
+        }
+        if (invisible) {
+            return Result.error("商品不存在");
+        }
+
+        // 4. 普通访问先将浏览量累加到Redis；AI查询不计浏览量
         if (recordViewCount) {
             incrementViewCount(productId);
         }
+
+        // 5. 返回商品详情
         return Result.success(product);
     }
 
@@ -216,12 +233,15 @@ public class ProductServiceImpl implements ProductService {
      * 商品详情回源加载器（从数据库查询并补齐图片）
      */
     private Product loadProductDetail(Long productId) {
-        // 查询商品详情（含卖家、分类信息）
+        // 1. 查询商品详情，包含卖家和分类信息
         Product product = productMapper.selectByIdWithDetails(productId);
-        // 商品存在时，补齐图片列表
+
+        // 2. 商品存在时补齐图片列表
         if (product != null) {
             fillSingleImages(product);
         }
+
+        // 3. 返回商品；不存在时返回null
         return product;
     }
 
@@ -231,7 +251,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional  // 开启事务
     public Result publish(Long userId, Product product, List<String> imageUrls) {
-        // ========== 1. 参数基础校验 ==========
+        // 1. 参数基础校验
         // 用户未登录
         if (userId == null) {
             return Result.error("用户未登录");
@@ -289,12 +309,7 @@ public class ProductServiceImpl implements ProductService {
             return categoryValidation;
         }
 
-        // 交易地点校验（可选，但填写的话不能为空白）
-        if (product.getTradeLocation() != null && product.getTradeLocation().trim().isEmpty()) {
-            product.setTradeLocation(null);
-        }
-
-        // ========== 2. 补齐系统字段 ==========
+        // 2. 补齐系统字段
         product.setSellerId(userId);      // 卖家ID
         product.setStatus(1);              // 状态：1-在售
         product.setViewCount(0);           // 初始浏览量
@@ -302,7 +317,7 @@ public class ProductServiceImpl implements ProductService {
         product.setCreateTime(new Date()); // 创建时间
         product.setUpdateTime(new Date()); // 更新时间
 
-        // ========== 3. 写入数据库 ==========
+        // 3. 写入数据库
         // 保存商品主表，生成商品ID
         productMapper.insert(product);
 
@@ -317,6 +332,8 @@ public class ProductServiceImpl implements ProductService {
         }
 
         log.info("用户 {} 发布了商品 [{}]: {}", userId, product.getId(), product.getTitle());
+
+        // 4. 返回发布结果
         return Result.success("发布成功");
     }
 
@@ -326,12 +343,12 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public Result update(Long userId, Product product) {
-        // ========== 1. 参数校验 ==========
+        // 1. 参数校验
         if (userId == null || product == null || product.getId() == null) {
             return Result.error("参数错误");
         }
 
-        // ========== 2. 查询原商品并校验权限 ==========
+        // 2. 查询原商品并校验权限
         Product existing = productMapper.selectById(product.getId());
         // 商品不存在或已删除
         if (existing == null || existing.getStatus() == 4) {
@@ -346,13 +363,13 @@ public class ProductServiceImpl implements ProductService {
             return Result.error("请先下架商品再修改");
         }
 
-        // ========== 3. 字段合法性校验 ==========
+        // 3. 字段合法性校验
         Result validation = validateProductUpdate(product, existing.getCategoryId());
         if (validation != null) {
             return validation;
         }
 
-        // ========== 4. 禁止修改敏感字段 ==========
+        // 4. 禁止修改敏感字段
         product.setSellerId(null);   // 卖家ID不可改
         product.setStatus(null);      // 状态不可直接改
         product.setViewCount(null);   // 浏览量不可直接改
@@ -360,10 +377,10 @@ public class ProductServiceImpl implements ProductService {
         product.setCreateTime(null);  // 创建时间不可改
         product.setUpdateTime(new Date());  // 只更新修改时间
 
-        // ========== 5. 更新商品主表 ==========
+        // 5. 更新商品主表
         productMapper.updateById(product);
 
-        // ========== 6. 更新图片列表（全量覆盖） ==========
+        // 6. 更新图片列表（全量覆盖）
         List<String> newUrls = product.getImageUrls();
         if (newUrls != null) {
             // 删除原图片
@@ -379,12 +396,12 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
-
-        // ========== 7. 清理缓存 ==========
+        // 7. 清理缓存
         cacheUtil.delete(PRODUCT_CACHE_KEY + product.getId());
-        redisTemplate.delete(PRODUCT_CACHE_KEY + product.getId());
 
         log.info("用户 {} 更新了商品 [{}]", userId, product.getId());
+
+        // 8. 发布商品变更事件，返回修改结果
         productChanged(product.getId());
         return Result.success("更新成功");
     }
@@ -393,6 +410,7 @@ public class ProductServiceImpl implements ProductService {
      * 校验商品编辑请求参数
      */
     private Result validateProductUpdate(Product product, Integer originalCategoryId) {
+        // 1. 校验并去除面交地点的首尾空格
         if (product.getTradeLocation() != null) {
             String location = product.getTradeLocation().trim();
             if (location.isEmpty() || location.length() > 200) {
@@ -401,7 +419,7 @@ public class ProductServiceImpl implements ProductService {
             product.setTradeLocation(location);
         }
 
-        // 标题校验
+        // 2. 校验标题、价格、库存和成色；未传入的字段不修改
         if (product.getTitle() != null) {
             int titleLength = product.getTitle().trim().length();
             if (titleLength < 2 || titleLength > 100) {
@@ -421,12 +439,14 @@ public class ProductServiceImpl implements ProductService {
                 && (product.getConditionLevel() < 1 || product.getConditionLevel() > 4)) {
             return Result.error("成色等级无效，需在 1 到 4 之间");
         }
+
+        // 3. 校验分类，旧商品可以保留原分类
         Result categoryValidation = validateCategory(product.getCategoryId(), originalCategoryId, false);
         if (categoryValidation != null) {
             return categoryValidation;
         }
 
-        // 图片列表校验
+        // 4. 校验图片列表；传入时必须保留1至9张有效图片
         List<String> imageUrls = product.getImageUrls();
         if (imageUrls != null) {
             if (imageUrls.isEmpty()) {
@@ -441,6 +461,8 @@ public class ProductServiceImpl implements ProductService {
                 }
             }
         }
+
+        // 5. 返回null表示校验通过
         return null;  // 校验通过
     }
 
@@ -449,16 +471,23 @@ public class ProductServiceImpl implements ProductService {
      * 编辑请求省略分类表示不修改，由 MyBatis 保留原值。
      */
     private Result validateCategory(Integer categoryId, Integer originalCategoryId, boolean required) {
+        // 1. 校验是否传入分类；编辑时不传表示保持原值
         if (categoryId == null) {
             return required ? Result.error("请选择商品分类") : null;
         }
+
+        // 2. 查询分类，确认分类存在
         Category category = categoryMapper.selectById(categoryId);
         if (category == null) {
             return Result.error("所选分类不存在");
         }
+
+        // 3. 编辑时允许保留原分类，兼容以前使用大类的商品
         if (!required && Objects.equals(categoryId, originalCategoryId)) {
             return null;
         }
+
+        // 4. 新发布或更换分类时，必须选择没有子分类的具体分类
         if (!categoryMapper.selectByParentId(categoryId).isEmpty()) {
             return Result.error("请选择具体子分类");
         }
@@ -470,11 +499,12 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Result offShelf(Long userId, Long productId) {
-        // 参数校验
+        // 1. 校验用户和商品ID
         if (userId == null || productId == null || productId <= 0) {
             return Result.error("参数错误");
         }
-        // 获取分布式锁
+
+        // 2. 获取商品操作锁
         String lockKey = PRODUCT_LOCK_KEY + productId;
         RLock lock = redissonClient.getLock(lockKey);
 
@@ -484,7 +514,7 @@ public class ProductServiceImpl implements ProductService {
                 return Result.error("操作过于频繁，请稍后重试");
             }
 
-            // 查询商品
+            // 3. 查询商品，校验卖家身份和当前状态
             Product product = productMapper.selectById(productId);
             // 商品不存在或已删除
             if (product == null || product.getStatus() == 4) {
@@ -499,11 +529,12 @@ public class ProductServiceImpl implements ProductService {
                 return Result.error("商品当前状态不允许下架");
             }
 
-            // 更新状态为已下架(2)
+            // 4. 更新商品状态和修改时间
             product.setStatus(2);
             product.setUpdateTime(new Date());
             productMapper.updateById(product);
-            // 清除缓存
+
+            // 5. 清除商品详情缓存，发布变更事件并返回结果
             redisTemplate.delete(PRODUCT_CACHE_KEY + productId);
 
             log.info("用户 {} 下架了商品 [{}]", userId, productId);
@@ -514,7 +545,7 @@ public class ProductServiceImpl implements ProductService {
             Thread.currentThread().interrupt();
             return Result.error("操作被中断，请重试");
         } finally {
-            // 释放锁
+            // 6. 最后释放当前线程持有的锁
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
@@ -526,11 +557,12 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Result onShelf(Long userId, Long productId) {
-        // 参数校验
+        // 1. 校验用户和商品ID
         if (userId == null || productId == null || productId <= 0) {
             return Result.error("参数错误");
         }
-        // 获取分布式锁
+
+        // 2. 获取商品操作锁
         String lockKey = PRODUCT_LOCK_KEY + productId;
         RLock lock = redissonClient.getLock(lockKey);
 
@@ -540,7 +572,7 @@ public class ProductServiceImpl implements ProductService {
                 return Result.error("操作过于频繁，请稍后重试");
             }
 
-            // 查询商品
+            // 3. 查询商品，校验卖家身份和当前状态
             Product product = productMapper.selectById(productId);
             // 商品不存在或已删除
             if (product == null || product.getStatus() == 4) {
@@ -559,11 +591,12 @@ public class ProductServiceImpl implements ProductService {
                 return Result.error("库存不足，无法上架");
             }
 
-            // 更新状态为在售(1)
+            // 4. 更新商品状态和修改时间
             product.setStatus(1);
             product.setUpdateTime(new Date());
             productMapper.updateById(product);
-            // 清除缓存
+
+            // 5. 清除商品详情缓存，发布变更事件并返回结果
             redisTemplate.delete(PRODUCT_CACHE_KEY + productId);
 
             log.info("用户 {} 上架了商品 [{}]", userId, productId);
@@ -573,6 +606,7 @@ public class ProductServiceImpl implements ProductService {
             Thread.currentThread().interrupt();
             return Result.error("操作被中断，请重试");
         } finally {
+            // 6. 最后释放当前线程持有的锁
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
@@ -587,10 +621,12 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public Result deleteProduct(Long userId, Long productId) {
+        // 1. 校验用户和商品ID
         if (userId == null || productId == null || productId <= 0) {
             return Result.error("参数错误");
         }
 
+        // 2. 查询商品，校验归属和商品状态
         Product product = productMapper.selectById(productId);
         if (product == null) {
             return Result.error("商品不存在");
@@ -605,16 +641,17 @@ public class ProductServiceImpl implements ProductService {
             return Result.error("商品已删除");
         }
 
-        // 软删除
+        // 3. 将商品标记为已删除，保留数据库记录
         product.setStatus(4);
         product.setUpdateTime(new Date());
         productMapper.updateById(product);
 
-
+        // 4. 删除商品详情缓存
         cacheUtil.delete(PRODUCT_CACHE_KEY + productId);
-        redisTemplate.delete(PRODUCT_CACHE_KEY + productId);
 
         log.info("用户 {} 删除了商品 [{}]", userId, productId);
+
+        // 5. 发布商品变更事件，返回删除结果
         productChanged(productId);
         return Result.success("删除成功");
     }
@@ -624,7 +661,7 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Result getSellerProducts(Long sellerId, Integer page, Integer size, Long viewerId) {
-        // 页码默认1
+        // 1. 校正分页参数，默认每页12条，最多50条
         if (page == null || page < 1) {
             page = 1;
         }
@@ -636,15 +673,17 @@ public class ProductServiceImpl implements ProductService {
         if (size > 50) {
             size = 50;
         }
-        // 本人查看自己主页返回全部状态，访客只看在售
+
+        // 2. 判断是否卖家本人，决定查询哪些商品状态
         boolean ownerView = viewerId != null && viewerId.equals(sellerId);
         Integer status = ownerView ? null : 1;  // 本人看全部，访客看在售
 
-        // 分页查询
+        // 3. 分页查询该卖家的商品
         Page<Product> pageObj = new Page<>(page, size);
         IPage<Product> result = productMapper.selectPageWithDetails(
                 pageObj, sellerId, null, null, null, null, null, status, "latest");
-        // 补齐图片
+
+        // 4. 批量补齐图片并返回分页结果
         if (!result.getRecords().isEmpty()) {
             fillImages(result.getRecords());
         }
@@ -665,24 +704,28 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Result getHotKeywords() {
-        // 从ZSet中按分数降序取前10个
+        // 1. 从Redis有序集合中按搜索分数降序取前10个
         Set<Object> top = redisTemplate.opsForZSet().reverseRange(HOT_KEYWORD_KEY, 0, 9);
         if (top == null || top.isEmpty()) {
             return Result.success(Collections.emptyList());
         }
+
+        // 2. 转为关键词列表并返回
         List<String> keywords = top.stream().map(Object::toString).collect(Collectors.toList());
         return Result.success(keywords);
     }
 
     /**
-     * 增加商品浏览量（异步写入Redis）
+     * 增加商品浏览量（当前请求写Redis，定时任务再同步到MySQL）
      */
     @Override
     public void incrementViewCount(Long productId) {
         String key = VIEW_COUNT_KEY + productId;
-        // Redis原子自增
+
+        // 1. 将本次浏览量累加到Redis
         redisTemplate.opsForValue().increment(key, 1);
-        // 设置过期时间2小时
+
+        // 2. 设置2小时过期时间，后续由定时任务同步到MySQL
         redisTemplate.expire(key, 2, TimeUnit.HOURS);
     }
 
@@ -692,14 +735,14 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Scheduled(fixedRate = 300_000)  // 5分钟 = 300000毫秒
     public void syncViewCounts() {
-        // ========== 1. 扫描所有浏览量相关的Redis Key ==========
+        // 1. 扫描所有浏览量相关的Redis Key
         Set<String> keys = new HashSet<>();
         ScanOptions options = ScanOptions.scanOptions()
                 .match(VIEW_COUNT_KEY + "*")  // 匹配前缀
                 .count(100)                   // 每次扫描100个
                 .build();
 
-        // 使用SCAN命令扫描（非阻塞）
+        // 使用SCAN分批扫描，避免用KEYS一次遍历全部键。
         try (Cursor<byte[]> cursor = redisTemplate.getConnectionFactory().getConnection().scan(options)) {
             while (cursor.hasNext()) {
                 keys.add(new String(cursor.next(), StandardCharsets.UTF_8));
@@ -714,11 +757,11 @@ public class ProductServiceImpl implements ProductService {
             return;
         }
 
-        // ========== 2. Lua脚本：原子性地获取并删除计数 ==========
+        // 2. Lua脚本：原子性地获取并删除计数
         String lua = "local v = redis.call('GET', KEYS[1]) redis.call('DEL', KEYS[1]) return v";
         DefaultRedisScript<Object> script = new DefaultRedisScript<>(lua, Object.class);
 
-        // ========== 3. 批量同步到数据库 ==========
+        // 3. 逐个读取并清除Redis计数，将浏览量增量写入MySQL
         int synced = 0;
         for (String key : keys) {
             try {
@@ -739,6 +782,7 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
+        // 4. 记录本次成功同步的商品数量
         if (synced > 0) {
             log.info("成功同步了 {} 个商品的浏览量", synced);
         }
@@ -749,9 +793,12 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public Product getProductById(Long productId) {
+        // 1. 未传商品ID时返回空结果
         if (productId == null) {
             return null;
         }
+
+        // 2. 查询商品基础信息，不经过详情缓存，也不计浏览量
         return productMapper.selectById(productId);
     }
 
@@ -761,7 +808,7 @@ public class ProductServiceImpl implements ProductService {
      * 为单个商品补齐图片列表（详情页用）
      */
     private void fillSingleImages(Product product) {
-        // 查询该商品的所有图片
+        // 查询该商品的图片，补到详情对象中
         List<ProductImage> images = productImageMapper.selectByProductId(product.getId());
         product.setImages(images);
     }
@@ -770,22 +817,22 @@ public class ProductServiceImpl implements ProductService {
      * 批量为商品列表补齐图片（列表页用）
      */
     private void fillImages(List<Product> products) {
-        // 列表为空直接返回
+        // 1. 商品列表为空时直接返回
         if (products.isEmpty()) {
             return;
         }
 
-        // 收集所有商品ID
+        // 2. 收集商品ID，一次查询所有图片
         List<Long> productIds = products.stream().map(Product::getId).collect(Collectors.toList());
 
-        // 一次查询所有商品图片
+        // 批量查询，避免逐个商品读取图片。
         List<ProductImage> allImages = productImageMapper.selectByProductIds(productIds);
 
-        // 按商品ID分组
+        // 3. 按商品ID分组，保留查询结果中的图片顺序
         Map<Long, List<ProductImage>> imageMap = allImages.stream()
                 .collect(Collectors.groupingBy(ProductImage::getProductId));
 
-        // 为每个商品设置图片列表
+        // 4. 给商品补齐图片，无图片时返回空列表
         for (Product product : products) {
             product.setImages(imageMap.getOrDefault(product.getId(), Collections.emptyList()));
         }

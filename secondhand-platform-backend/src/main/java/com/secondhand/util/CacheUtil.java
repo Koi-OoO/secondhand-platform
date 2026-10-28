@@ -287,7 +287,7 @@ public class CacheUtil {
     }
 
     /**
-     * 防击穿查询（逻辑过期版）：逻辑过期后异步重建，其他线程先用旧值
+     * 防击穿查询（逻辑过期版）：获得锁的请求同步重建，未获得锁的请求优先返回旧值
      * @param keyPrefix key前缀
      * @param id 业务id
      * @param type 返回类型
@@ -301,7 +301,7 @@ public class CacheUtil {
     public <ID, T> T queryWithLogicalExpire(String keyPrefix, ID id, Class<T> type,
                                             Function<ID, T> dbFallback,
                                             long logicalTTL, long physicalTTL) {
-        // 拼接缓存key
+        // 1. 拼接缓存key，读取尚未逻辑过期的数据
         String key = keyPrefix + id;
         // 获取逻辑过期缓存（未过期才返回数据）
         Object current = getWithLogicalExpire(key);
@@ -309,13 +309,15 @@ public class CacheUtil {
         if (current != null) {
             return isNullPlaceholder(current) ? null : type.cast(current);
         }
-        // 缓存逻辑过期或不存在，尝试获取锁去重建
+
+        // 2. 缓存过期或不存在时，尝试获取重建锁
         RLock lock = redissonClient.getLock(REBUILD_LOCK_PREFIX + key);
         boolean locked = false;
         try {
             // 尝试获取锁
             locked = lock.tryLock(REBUILD_LOCK_WAIT, REBUILD_LOCK_LEASE, TimeUnit.SECONDS);
-            // 没拿到锁
+
+            // 3. 未获得锁时优先返回旧值；没有旧值则等待后重试
             if (!locked) {
                 // 获取旧值（即使过期也返回）做降级兜底
                 Object stale = getEvenIfExpired(key);
@@ -326,19 +328,22 @@ public class CacheUtil {
                 Thread.sleep(100);
                 return queryWithLogicalExpire(keyPrefix, id, type, dbFallback, logicalTTL, physicalTTL);
             }
-            // 拿到锁后双重检查
+
+            // 4. 获得锁后再次检查缓存，避免重复查询数据库
             Object recheck = getWithLogicalExpire(key);
             if (recheck != null) {
                 return isNullPlaceholder(recheck) ? null : type.cast(recheck);
             }
-            // 从数据库查询数据
+
+            // 5. 查询数据库，无数据时缓存空值占位符
             T data = dbFallback.apply(id);
             // 数据为空，设置空值占位符
             if (data == null) {
                 setNull(key);
                 return null;
             }
-            // 写入逻辑过期缓存
+
+            // 6. 写入数据及逻辑过期时间，返回查询结果
             setWithLogicalExpire(key, data, logicalTTL, physicalTTL);
             return data;
         } catch (InterruptedException ex) {
@@ -346,7 +351,7 @@ public class CacheUtil {
             Thread.currentThread().interrupt();
             return null;
         } finally {
-            // 释放锁
+            // 7. 最后释放当前线程持有的锁
             if (locked && lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }

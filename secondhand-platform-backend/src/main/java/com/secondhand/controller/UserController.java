@@ -56,47 +56,83 @@ public class UserController {
     @GetMapping("/security")
     @Operation(summary = "查询账号安全信息", description = "需要登录，返回账号、密码和邮箱验证状态")
     public Result security(@Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        return userId == null ? Result.error("未登录") : accountSecurityService.getSecurityInfo(userId);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，查询账号安全状态
+        return accountSecurityService.getSecurityInfo(userId);
     }
 
     @PostMapping("/email/bind/request")
     @Operation(summary = "申请绑定邮箱验证码", description = "需要登录，向待绑定邮箱发送验证码")
     public Result requestEmailBindCode(@RequestBody EmailBindRequest request,
                                        @Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        return userId == null ? Result.error("未登录") : accountSecurityService.requestEmailBindCode(userId, request);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，申请绑定邮箱验证码
+        return accountSecurityService.requestEmailBindCode(userId, request);
     }
 
     @PostMapping("/email/bind/verify")
     @Operation(summary = "验证并绑定邮箱", description = "需要登录，验证码通过后绑定邮箱")
     public Result verifyEmailBindCode(@RequestBody EmailBindVerifyRequest request,
                                       @Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        return userId == null ? Result.error("未登录") : accountSecurityService.verifyEmailBindCode(userId, request);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，验证并绑定邮箱
+        return accountSecurityService.verifyEmailBindCode(userId, request);
     }
 
     @PostMapping("/email/unbind/request")
     @Operation(summary = "申请解绑邮箱验证码", description = "需要登录，向当前已验证邮箱发送解绑验证码")
     public Result requestEmailUnbindCode(@Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        return userId == null ? Result.error("未登录") : accountSecurityService.requestEmailUnbindCode(userId);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，申请解绑邮箱验证码
+        return accountSecurityService.requestEmailUnbindCode(userId);
     }
 
     @PostMapping("/email/unbind")
     @Operation(summary = "解绑邮箱", description = "需要登录，验证当前邮箱验证码后解绑邮箱")
     public Result unbindEmail(@RequestBody EmailUnbindRequest request,
                               @Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        return userId == null ? Result.error("未登录") : accountSecurityService.unbindEmail(userId, request);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，验证并解绑邮箱
+        return accountSecurityService.unbindEmail(userId, request);
     }
 
     @PostMapping("/password/change")
     @Operation(summary = "修改密码", description = "需要登录，验证旧密码后设置新密码")
     public Result changePassword(@RequestBody ChangePasswordRequest request,
                                  @Parameter(hidden = true) HttpSession session) {
+        // 1. 获取当前用户，校验登录状态
         Long userId = SessionUtil.getUserId(session);
-        return userId == null ? Result.error("未登录") : accountSecurityService.changePassword(userId, request);
+        if (userId == null) {
+            return Result.error("未登录");
+        }
+
+        // 2. 调用业务层，核对旧密码并修改密码
+        return accountSecurityService.changePassword(userId, request);
     }
 
     @PostMapping("/password/forgot/request")
@@ -128,18 +164,22 @@ public class UserController {
                             content = @Content(schema = @Schema(implementation = User.class)))
                         @RequestBody User user,
                         @Parameter(hidden = true) HttpServletRequest request) {
+        // 1. 校验请求来源
         sessionAccountService.checkOrigin(request);
-        // 调用service层校验登录
-        Result r = userService.login(user.getUsername(), user.getPassword());
-        // 登录成功（code=200）
-        if (r.getCode() == 200) {
+
+        // 2. 校验账号、启用状态和密码
+        Result loginResult = userService.login(user.getUsername(), user.getPassword());
+
+        // 3. 登录校验通过后，建立会话授权和当前身份
+        if (loginResult.getCode() == 200) {
             // 获取完整用户信息
-            User u = userService.getUserByUsername(user.getUsername());
+            User authenticatedUser = userService.getUserByUsername(user.getUsername());
             // 将用户信息存入session
-            sessionAccountService.establishLogin(request, u);
+            sessionAccountService.establishLogin(request, authenticatedUser);
         }
-        // 返回登录结果
-        return r;
+
+        // 4. 返回登录结果
+        return loginResult;
     }
 
     /**
@@ -162,19 +202,21 @@ public class UserController {
     @GetMapping("/profile")  // 处理GET请求，路径为 /user/profile
     @Operation(summary = "查询当前用户资料", description = "需要登录，返回当前用户最新的个人资料")
     public Result profile(@Parameter(hidden = true) HttpSession session) {
-        // 从session中获取当前用户
+        // 1. 获取当前会话用户，校验登录状态
         User user = SessionUtil.getUser(session);
         // 未登录
         if (user == null) {
             return Result.error("未登录");
         }
-        // 查询最新用户信息（防止session中的信息已过期）
+
+        // 2. 查询最新用户资料，避免返回过时信息
         User latest = userService.getUserById(user.getId());
         // 用户不存在
         if (latest == null) {
             return Result.error("用户不存在");
         }
-        // 清空密码，防止返回前端
+
+        // 3. 移除密码字段，返回本人资料
         latest.setPassword(null);
         // 返回用户信息
         return Result.success(latest);
@@ -187,17 +229,20 @@ public class UserController {
     @Operation(summary = "查询公开用户资料", description = "公开接口，返回用户主页展示所需的资料信息")
     public Result publicProfile(@Parameter(description = "用户ID", example = "2", required = true)
                                 @PathVariable Long userId) {  // @PathVariable从路径中获取userId
-        // 校验userId是否有效
+
+        // 1. 校验用户ID
         if (userId == null || userId <= 0) {
             return Result.error("用户 ID 无效");
         }
-        // 查询用户
+
+        // 2. 查询公开资料对应的用户
         User user = userService.getUserById(userId);
         // 用户不存在
         if (user == null) {
             return Result.error("用户不存在");
         }
-        // 清空敏感信息（密码、手机、邮箱）
+
+        // 3. 移除密码、手机和邮箱等私密字段，返回公开资料
         user.setPassword(null);
         user.setPhone(null);
         user.setEmail(null);
@@ -216,13 +261,14 @@ public class UserController {
                              content = @Content(schema = @Schema(implementation = User.class)))
                          @RequestBody User user,
                          @Parameter(hidden = true) HttpSession session) {
-        // 从session中获取用户ID（不信任前端传入的ID，防止越权）
+        // 1. 从会话获取真实用户ID，不能信任前端传入的身份
         Long userId = SessionUtil.getUserId(session);
         // 未登录
         if (userId == null) {
             return Result.error("未登录");
         }
-        // 设置用户ID（从session获取的才是真实的）
+
+        // 2. 绑定当前用户ID，排除禁止通过资料接口修改的字段
         user.setId(userId);
         // 防止前端传入密码或用户名，强制设为null
         user.setPassword(null);
@@ -233,16 +279,20 @@ public class UserController {
         user.setStatus(null);
         user.setCreateTime(null);
         user.setUpdateTime(null);
-        // 调用service更新
-        boolean ok = userService.updateById(user);
-        // 更新成功
-        if (ok) {
+
+        // 3. 更新允许修改的用户资料
+        boolean updated = userService.updateById(user);
+
+        // 4. 更新成功后刷新会话资料，保持当前登录身份
+        if (updated) {
             // 查询最新用户信息
             User latest = userService.getUserById(userId);
             // 更新session中的用户信息
             synchronized (session) {
                 User active = SessionUtil.getSessionUser(session);
-                if (active != null && userId.equals(active.getId())) SessionUtil.login(session, latest);
+                if (active != null && userId.equals(active.getId())) {
+                    SessionUtil.login(session, latest);
+                }
             }
             return Result.success("更新成功");
         }
@@ -256,11 +306,16 @@ public class UserController {
     @PostMapping("/logout")  // 处理POST请求，路径为 /user/logout
     @Operation(summary = "退出登录", description = "需要登录，清空当前会话")
     public Result logout(@Parameter(hidden = true) HttpServletRequest request) {
+        // 1. 校验请求来源
         sessionAccountService.checkOrigin(request);
         HttpSession session = request.getSession(false);
-        // 清空session中的用户信息
-        if (session != null) sessionAccountService.logout(session);
-        // 返回成功
+
+        // 2. 已有会话时关闭连接并结束会话
+        if (session != null) {
+            sessionAccountService.logout(session);
+        }
+
+        // 3. 返回退出结果
         return Result.success("已退出");
     }
 }

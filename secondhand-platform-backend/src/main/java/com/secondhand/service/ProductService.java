@@ -15,7 +15,7 @@ public interface ProductService {
     /**
      * 分页查询商品列表
      *
-     * 业务场景：用于首页、搜索页、分类页、卖家主页等商品列表展示场景，
+     * MySQL分页兼容入口；商品广场全文搜索使用独立的ES接口。
      * 支持按卖家、分类、关键词、价格区间、成色和排序方式组合筛选。
      *
      * @param page 页码
@@ -106,7 +106,7 @@ public interface ProductService {
     /**
      * 记录商品浏览量
      *
-     * 说明：浏览量先累加到 Redis，再由定时任务异步回刷数据库，
+     * 说明：浏览量先累加到 Redis，再由定时任务定期同步到数据库，
      * 以减少高并发场景下的数据库写入压力。
      *
      * @param productId 商品 ID

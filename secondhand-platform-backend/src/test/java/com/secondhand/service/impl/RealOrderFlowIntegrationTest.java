@@ -43,7 +43,8 @@ import static org.mockito.ArgumentMatchers.*;
 @ContextConfiguration(classes=RealOrderFlowIntegrationTest.Config.class)
 @Transactional
 class RealOrderFlowIntegrationTest {
- @Configuration @EnableTransactionManagement @MapperScan("com.secondhand.mapper")
+ // 仅由 @ContextConfiguration 显式加载；不加 @Configuration，避免被其他 Spring Boot 测试组件扫描。
+ @EnableTransactionManagement @MapperScan("com.secondhand.mapper")
  @Import({OrderServiceImpl.class,MeetupProposalService.class,MessageServiceImpl.class,EvaluationServiceImpl.class})
  static class Config {
   @Bean DataSource dataSource(org.springframework.core.env.Environment environment) throws Exception {

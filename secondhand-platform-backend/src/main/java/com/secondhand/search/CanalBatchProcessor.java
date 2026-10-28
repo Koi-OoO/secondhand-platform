@@ -11,25 +11,39 @@ public class CanalBatchProcessor {
     private final int batchSize;
 
     public CanalBatchProcessor(CanalChangeDecoder decoder, ProductSearchSyncWriter writer, int batchSize) {
-        this.decoder = decoder; this.writer = writer; this.batchSize = batchSize;
+        this.decoder = decoder;
+        this.writer = writer;
+        this.batchSize = batchSize;
     }
 
     public boolean poll(CanalConnector connector) {
+        // 1. 拉取一批消息；没有新消息时直接返回
         var message = connector.getWithoutAck(batchSize);
-        if (message.getId() == -1) return false;
+        if (message.getId() == -1) {
+            return false;
+        }
         try {
+            // 2. raw 消息需要先解析成 CanalEntry
             var entries = message.getEntries();
             if (message.isRaw()) {
                 entries = new ArrayList<>();
-                for (var raw : message.getRawEntries()) entries.add(CanalEntry.Entry.parseFrom(raw));
+                for (var rawEntry : message.getRawEntries()) {
+                    entries.add(CanalEntry.Entry.parseFrom(rawEntry));
+                }
             }
+
+            // 3. 转换为商品刷新并写入 ES；全部成功后才确认消息
             writer.apply(decoder.decode(entries));
             connector.ack(message.getId());
             return true;
-        } catch (Exception ex) {
-            try { connector.rollback(message.getId()); }
-            catch (Exception rollbackFailure) { ex.addSuppressed(rollbackFailure); }
-            throw new IllegalStateException("Canal 批次处理失败，消息将重试", ex);
+        } catch (Exception exception) {
+            // 4. 任一步失败都回滚，保留消息等待下次重试
+            try {
+                connector.rollback(message.getId());
+            } catch (Exception rollbackFailure) {
+                exception.addSuppressed(rollbackFailure);
+            }
+            throw new IllegalStateException("Canal 批次处理失败，消息将重试", exception);
         }
     }
 }
