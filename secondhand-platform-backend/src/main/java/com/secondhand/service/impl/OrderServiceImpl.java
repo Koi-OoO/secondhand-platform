@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.secondhand.constant.OrderStatus;
+import com.secondhand.constant.ProductStatus;
 import com.secondhand.entity.BatchOperationResult;
 import com.secondhand.entity.Order;
 import com.secondhand.entity.OrderBatchShipItem;
@@ -89,7 +91,7 @@ public class OrderServiceImpl implements OrderService {
         if (order == null || !order.getSellerId().equals(sellerId)) {
             return Result.error("订单不存在或无权提醒");
         }
-        if (!Integer.valueOf(2).equals(order.getStatus())) {
+        if (!OrderStatus.isWaitConfirm(order.getStatus())) {
             return Result.error("仅待买家确认的订单可以提醒；有问题时请先协商");
         }
 
@@ -104,7 +106,7 @@ public class OrderServiceImpl implements OrderService {
         int changed = orderMapper.update(null, new UpdateWrapper<Order>()
                 .eq("id", orderId)
                 .eq("seller_id", sellerId)
-                .eq("status", 2)
+                .eq("status", OrderStatus.WAIT_CONFIRM)
                 .and(query -> query.isNull("last_remind_time").or().le("last_remind_time", cutoff))
                 .set("last_remind_time", now));
         if (changed != 1) {
@@ -132,14 +134,14 @@ public class OrderServiceImpl implements OrderService {
         if (order == null || !order.getBuyerId().equals(buyerId)) {
             return Result.error("订单不存在或无权反馈");
         }
-        if (!Integer.valueOf(2).equals(order.getStatus())) {
+        if (!OrderStatus.isWaitConfirm(order.getStatus())) {
             return Result.error("仅待确认交付的订单可反馈；其他情况请联系对方");
         }
 
         // 3. 保存问题说明，将订单改为交易待协商
         order.setDeliveryIssue(issue.trim()); // 买家填写的问题说明
         order.setDeliveryIssueTime(new Date());
-        order.setStatus(6); // 交易待协商，暂停卖家的确认提醒
+        order.setStatus(OrderStatus.NEGOTIATING); // 交易待协商，暂停卖家的确认提醒
         orderMapper.updateById(order);
 
         // 4. 通知卖家处理问题，返回处理结果
@@ -161,7 +163,7 @@ public class OrderServiceImpl implements OrderService {
         if (order == null || !order.getSellerId().equals(sellerId)) {
             return Result.error("订单不存在或无权接单");
         }
-        if (!Integer.valueOf(5).equals(order.getStatus())) {
+        if (!OrderStatus.isWaitAccept(order.getStatus())) {
             return Result.error("仅待接单订单可接单");
         }
 
@@ -169,12 +171,12 @@ public class OrderServiceImpl implements OrderService {
         Date now = new Date();
         // 仅更新仍处于待接单的本人订单，重复接单不重复通知。
         int changed = orderMapper.update(null, new UpdateWrapper<Order>()
-                .eq("id", orderId).eq("seller_id", sellerId).eq("status", 5)
-                .set("status", 1).set("accept_time", now));
+                .eq("id", orderId).eq("seller_id", sellerId).eq("status", OrderStatus.WAIT_ACCEPT)
+                .set("status", OrderStatus.WAIT_MEETUP).set("accept_time", now));
         if (changed != 1) {
             return Result.error("订单状态已变化，请刷新后重试");
         }
-        order.setStatus(1);
+        order.setStatus(OrderStatus.WAIT_MEETUP);
         order.setAcceptTime(now);
 
         // 3. 通知买家卖家已接单，返回接单结果
@@ -281,7 +283,7 @@ public class OrderServiceImpl implements OrderService {
             return Result.error("商品不存在");
         }
         // 商品状态不是1（在售）
-        if (product.getStatus() != 1) {
+        if (!ProductStatus.isOnSale(product.getStatus())) {
             return Result.error("商品已下架或已售罄");
         }
         // 不能购买自己的商品
@@ -335,14 +337,14 @@ public class OrderServiceImpl implements OrderService {
         order.setFreight(BigDecimal.ZERO);  // 运费（默认0）
         order.setTotalAmount(productAmount);  // 总金额
         order.setAddress(location);  // 下单时的地点快照，商品修改不影响已有订单
-        order.setStatus(5);  // 新订单先等待卖家接单
+        order.setStatus(OrderStatus.WAIT_ACCEPT);  // 新订单先等待卖家接单
         order.setCreateTime(new Date());  // 创建时间
         orderMapper.insert(order);  // 保存订单
 
         // 6. 扣减库存，更新商品状态
         product.setStock(product.getStock() - quantity);
         // 库存为0时，商品状态改为3（已售罄）
-        product.setStatus(product.getStock() == 0 ? 3 : 1);
+        product.setStatus(product.getStock() == 0 ? ProductStatus.SOLD_OUT : ProductStatus.ON_SALE);
         product.setUpdateTime(new Date());  // 更新时间
         productMapper.updateById(product);  // 更新商品
 
@@ -503,12 +505,12 @@ public class OrderServiceImpl implements OrderService {
             return Result.error("无权操作");
         }
         // 实际交付前，买家可以取消。
-        if (order.getStatus() != 1 && order.getStatus() != 5) {
+        if (!OrderStatus.isWaitMeetup(order.getStatus()) && !OrderStatus.isWaitAccept(order.getStatus())) {
             return Result.error("仅待接单或待面交订单可取消");
         }
 
         // 2. 将订单改为已取消，记录取消时间和原因
-        order.setStatus(4);
+        order.setStatus(OrderStatus.CANCELLED);
         order.setCancelTime(new Date());
         order.setCancelType(1);  // 取消类型：1-买家取消
         order.setCancelReason("买家取消订单");
@@ -587,13 +589,13 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getBuyerId().equals(buyerId)) {
             return Result.error("无权操作");
         }
-        // 待买家确认（2）或交易待协商（6）时，买家可以核实后确认完成。
-        if (order.getStatus() != 2 && order.getStatus() != 6) {
+        // 待买家确认或交易待协商时，买家可以核实后确认完成。
+        if (!OrderStatus.isWaitConfirm(order.getStatus()) && !OrderStatus.isNegotiating(order.getStatus())) {
             return Result.error("仅待确认状态可确认");
         }
 
         // 2. 将订单改为已完成，记录完成时间
-        order.setStatus(3);
+        order.setStatus(OrderStatus.COMPLETED);
         order.setFinishTime(new Date());  // 完成时间
         orderMapper.updateById(order);
 
@@ -722,7 +724,7 @@ public class OrderServiceImpl implements OrderService {
 
         // 5. 查询已完成订单的买家评价，确定已评价标记
         Map<Long, Long> completedBuyers = orders.stream()
-                .filter(order -> Integer.valueOf(3).equals(order.getStatus()))
+                .filter(order -> OrderStatus.isCompleted(order.getStatus()))
                 .collect(Collectors.toMap(Order::getId, Order::getBuyerId));
         Set<Long> evaluatedIds = new HashSet<>();
         if (!completedBuyers.isEmpty()) {
@@ -765,7 +767,7 @@ public class OrderServiceImpl implements OrderService {
     private boolean canHideOrderRecord(Order order) {
         Integer status = order.getStatus();
         // 状态3：已完成，状态4：已取消
-        return Integer.valueOf(3).equals(status) || Integer.valueOf(4).equals(status);
+        return OrderStatus.isCompleted(status) || Integer.valueOf(OrderStatus.CANCELLED).equals(status);
     }
 
     /**
@@ -866,7 +868,7 @@ public class OrderServiceImpl implements OrderService {
             return "无权操作";
         }
         // 订单状态不是待交付
-        if (order.getStatus() != 1) {
+        if (!OrderStatus.isWaitMeetup(order.getStatus())) {
             return "请先接单，仅待面交订单可确认交付";
         }
         if (order.getMeetupTime() == null) {
@@ -876,7 +878,7 @@ public class OrderServiceImpl implements OrderService {
         // 3. 记录卖家的交付声明，等待买家核实确认
         // 面交不生成物流凭证，也不能把卖家确认交付解释为已支付。
         order.setExpressNo(null);
-        order.setStatus(2);  // 状态改为待确认
+        order.setStatus(OrderStatus.WAIT_CONFIRM);  // 状态改为待确认
         order.setDeliverTime(new Date());  // 交付时间
         orderMapper.updateById(order);
         log.info("卖家已确认面交交付：订单号={}", order.getOrderNo());
@@ -906,13 +908,13 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getSellerId().equals(sellerId)) {
             return "无权操作";
         }
-        if (order.getStatus() != 1 && order.getStatus() != 5) {
+        if (!OrderStatus.isWaitMeetup(order.getStatus()) && !OrderStatus.isWaitAccept(order.getStatus())) {
             return "仅待接单或待面交订单可拒绝或取消";
         }
-        boolean waitingAcceptance = order.getStatus() == 5;
+        boolean waitingAcceptance = OrderStatus.isWaitAccept(order.getStatus());
 
         // 3. 将订单改为已取消，保存卖家的取消原因
-        order.setStatus(4);
+        order.setStatus(OrderStatus.CANCELLED);
         order.setCancelTime(new Date());
         order.setCancelType(2);  // 取消类型：2-卖家拒绝
         order.setCancelReason(normalizeRejectReason(reason));  // 拒绝原因
@@ -950,9 +952,10 @@ public class OrderServiceImpl implements OrderService {
             // 尝试获取锁
             locked = lock.tryLock(LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS);
             if (!locked) {
-                // 拿不到锁时记录警告，但继续回补
+                // 未持有商品锁时不能读改写库存，抛出异常让取消或拒单操作一起回滚。
                 log.warn("回补库存时未能获取锁（系统繁忙）：订单号={} 商品ID={}",
                         order.getOrderNo(), order.getProductId());
+                throw new IllegalStateException("库存回补繁忙，请重试");
             }
 
             // 2. 查询商品，商品不存在时结束处理
@@ -967,8 +970,8 @@ public class OrderServiceImpl implements OrderService {
             product.setStock(currentStock + restoreQuantity);
 
             // 4. 有库存且原为已售罄时恢复在售，保存商品
-            if (product.getStock() > 0 && product.getStatus() == 3) {
-                product.setStatus(1);
+            if (product.getStock() > 0 && ProductStatus.isSoldOut(product.getStatus())) {
+                product.setStatus(ProductStatus.ON_SALE);
             }
             product.setUpdateTime(new Date());
             productMapper.updateById(product);
@@ -979,6 +982,8 @@ public class OrderServiceImpl implements OrderService {
         } catch (InterruptedException ex) {
             // 中断异常，恢复中断状态
             Thread.currentThread().interrupt();
+            // 订单已在当前事务中改为取消，回补失败必须抛出异常，让订单修改一起回滚。
+            throw new IllegalStateException("库存回补被中断，请重试", ex);
         } finally {
             // 6. 最后释放当前线程持有的锁
             if (locked && lock.isHeldByCurrentThread()) {

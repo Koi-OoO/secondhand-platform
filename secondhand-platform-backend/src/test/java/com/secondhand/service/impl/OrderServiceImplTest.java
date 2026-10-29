@@ -361,6 +361,69 @@ class OrderServiceImplTest {
         verify(productMapper, never()).updateById(any(Product.class));
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 4, 6})
+    void cancelAndRejectCannotRestoreStockAfterLeavingPreDeliveryStates(int status) {
+        Order order = completedOrder(10L, 20L, 30L);
+        order.setStatus(status);
+        when(orderMapper.selectById(10L)).thenReturn(order);
+
+        assertThat(service.cancelOrder(20L, 10L).getCode()).isNotEqualTo(200);
+        assertThat(service.rejectOrder(30L, 10L, "取消").getCode()).isNotEqualTo(200);
+        verify(orderMapper, never()).updateById(any(Order.class));
+        verify(productMapper, never()).updateById(any(Product.class));
+    }
+
+    @Test
+    void anotherUserCannotCancelOrRejectOrder() {
+        Order order = completedOrder(10L, 20L, 30L);
+        order.setStatus(5);
+        when(orderMapper.selectById(10L)).thenReturn(order);
+
+        assertThat(service.cancelOrder(99L, 10L).getCode()).isNotEqualTo(200);
+        assertThat(service.rejectOrder(99L, 10L, "取消").getCode()).isNotEqualTo(200);
+        verify(orderMapper, never()).updateById(any(Order.class));
+        verify(productMapper, never()).updateById(any(Product.class));
+    }
+
+    @Test
+    void cancelAndRejectFailWhenStockLockIsUnavailable() throws InterruptedException {
+        when(rLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+        Order order = completedOrder(10L, 20L, 30L);
+        order.setProductId(40L);
+        order.setStatus(5);
+        when(orderMapper.selectById(10L)).thenReturn(order);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.cancelOrder(20L, 10L))
+                .isInstanceOf(IllegalStateException.class);
+        order.setStatus(5);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.rejectOrder(30L, 10L, "无法交易"))
+                .isInstanceOf(IllegalStateException.class);
+        verify(productMapper, never()).selectById(anyLong());
+        verify(productMapper, never()).updateById(any(Product.class));
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void interruptedStockRestorePropagatesFailureAndPreservesInterrupt() throws InterruptedException {
+        when(rLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class)))
+                .thenThrow(new InterruptedException("test"));
+        Order order = completedOrder(10L, 20L, 30L);
+        order.setProductId(40L);
+        order.setStatus(5);
+        when(orderMapper.selectById(10L)).thenReturn(order);
+
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.cancelOrder(20L, 10L))
+                    .isInstanceOf(IllegalStateException.class).hasCauseInstanceOf(InterruptedException.class);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            verify(productMapper, never()).updateById(any(Product.class));
+            verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     @Test
     void cancelOrderRestoresStockUsingOrderQuantity() {
         Order order = new Order();
