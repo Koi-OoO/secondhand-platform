@@ -1,5 +1,6 @@
 package com.secondhand.controller;
 
+import com.secondhand.service.impl.SessionAccountServiceImpl;
 import com.secondhand.entity.User;
 import com.secondhand.handler.GlobalExceptionHandler;
 import com.secondhand.interceptor.AuthInterceptor;
@@ -27,7 +28,7 @@ class SessionAccountControllerTest {
         users = mock(UserService.class);
         a = new User(); a.setId(1L); a.setUsername("a"); a.setStatus(1); a.setPassword(PasswordUtil.encrypt("secret"));
         when(users.getUserById(1L)).thenReturn(a);
-        SessionAccountService accounts = new SessionAccountService(users, new ChatWebSocketHandler());
+        SessionAccountService accounts = new SessionAccountServiceImpl(users, new ChatWebSocketHandler());
         MockHttpServletRequest request = new MockHttpServletRequest(); session = new MockHttpSession(); request.setSession(session);
         accounts.establishLogin(request, a); token = accounts.state(request).getCsrfToken();
         AuthInterceptor filter = new AuthInterceptor(); ReflectionTestUtils.setField(filter, "sessionAccountService", accounts);

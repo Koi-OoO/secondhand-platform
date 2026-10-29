@@ -1,5 +1,6 @@
 package com.secondhand.interceptor;
 
+import com.secondhand.service.impl.SessionAccountServiceImpl;
 import com.secondhand.entity.User;
 import com.secondhand.service.SessionAccountService;
 import com.secondhand.service.UserService;
@@ -55,7 +56,7 @@ class SessionAccountBoundaryTest {
         UserService users = mock(UserService.class);
         User a = new User(); a.setId(1L); a.setStatus(1); a.setPassword(PasswordUtil.encrypt("a"));
         when(users.getUserById(1L)).thenReturn(a);
-        SessionAccountService accounts = new SessionAccountService(users, new ChatWebSocketHandler());
+        SessionAccountService accounts = new SessionAccountServiceImpl(users, new ChatWebSocketHandler());
         MockHttpServletRequest req = new MockHttpServletRequest("POST", "/product/publish"); req.setSession(new MockHttpSession());
         accounts.establishLogin(req, a);
         AuthInterceptor filter = new AuthInterceptor(); ReflectionTestUtils.setField(filter, "sessionAccountService", accounts);

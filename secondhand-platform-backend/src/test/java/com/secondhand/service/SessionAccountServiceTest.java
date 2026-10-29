@@ -1,5 +1,6 @@
 package com.secondhand.service;
 
+import com.secondhand.service.impl.SessionAccountServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.secondhand.entity.User;
 import com.secondhand.util.PasswordUtil;
@@ -21,7 +22,7 @@ class SessionAccountServiceTest {
 
     @BeforeEach void setup() {
         users = mock(UserService.class);
-        service = new SessionAccountService(users, new ChatWebSocketHandler());
+        service = new SessionAccountServiceImpl(users, new ChatWebSocketHandler());
         request = new MockHttpServletRequest();
         request.setSession(new MockHttpSession());
         a = user(1L); b = user(2L);
