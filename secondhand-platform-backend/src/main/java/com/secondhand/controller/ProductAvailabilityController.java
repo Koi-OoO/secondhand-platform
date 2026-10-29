@@ -1,5 +1,6 @@
 package com.secondhand.controller;
 
+import com.secondhand.constant.ProductStatus;
 import com.secondhand.mapper.ProductMapper;
 import com.secondhand.entity.Product;
 import com.secondhand.util.Result;
@@ -42,14 +43,14 @@ public class ProductAvailabilityController {
         List<Availability> result = new ArrayList<>();
         for (Long productId : productIds) {
             Product product = productMap.get(productId);
-            if (product == null || Integer.valueOf(4).equals(product.getStatus())) {
-                result.add(new Availability(productId, 0, 4));
+            if (product == null || ProductStatus.isDeleted(product.getStatus())) {
+                result.add(new Availability(productId, 0, ProductStatus.DELETED));
                 continue;
             }
 
             // 空库存和负库存按0返回；缺少状态时沿用已下架（2）的默认值。
             int stock = product.getStock() == null ? 0 : Math.max(0, product.getStock());
-            int status = product.getStatus() == null ? 2 : product.getStatus();
+            int status = product.getStatus() == null ? ProductStatus.OFF_SHELF : product.getStatus();
             result.add(new Availability(productId, stock, status));
         }
 

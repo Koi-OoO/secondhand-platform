@@ -89,11 +89,11 @@
               </div>
               <div class="order-info__line">面交地点：{{ order.address }}</div>
               <div class="order-info__line">面交时间：{{ order.meetupTime ? formatDate(order.meetupTime) : '尚未确认，双方私信协商' }}</div>
-              <div v-if="order.status === 1 && !order.meetupTime" class="order-notice">买家尚未确认面交时间，请进入订单详情发送预约卡片并等待确认，之后才能声明交付。</div>
-              <div v-if="order.status === 5" class="order-info__line">等待卖家接单，接单后通知买家。</div>
+              <div v-if="order.status === ORDER_WAIT_MEETUP && !order.meetupTime" class="order-notice">买家尚未确认面交时间，请进入订单详情发送预约卡片并等待确认，之后才能声明交付。</div>
+              <div v-if="order.status === ORDER_WAIT_ACCEPT" class="order-info__line">等待卖家接单，接单后通知买家。</div>
               <div class="order-info__line">请线下验货并自行付款；平台不代收款、不提供交易担保，交付状态不代表已付款。</div>
-              <div v-if="order.status === 6" class="order-notice">交易待协商：{{ order.deliveryIssue }}。请联系对方，解决后再确认收到。</div>
-              <div v-if="order.status === 2" class="order-info__line">卖家声明已交付，等待买家核实，交易尚未完成。</div>
+              <div v-if="order.status === ORDER_NEGOTIATING" class="order-notice">交易待协商：{{ order.deliveryIssue }}。请联系对方，解决后再确认收到。</div>
+              <div v-if="order.status === ORDER_WAIT_CONFIRM" class="order-info__line">卖家声明已交付，等待买家核实，交易尚未完成。</div>
               <div v-if="cancelNotice(order)" class="order-notice">{{ cancelNotice(order) }}</div>
             </div>
           </div>
@@ -101,9 +101,9 @@
           <footer class="order-card__footer">
             <el-button @click="$router.push({ name: 'OrderDetail', params: { id: order.id } })">订单详情</el-button>
             <template v-if="tab === 'bought'">
-              <el-button v-if="order.status === 2" @click="$router.push({ name: 'OrderDetail', params: { id: order.id } })">未收到／交易有问题</el-button>
+              <el-button v-if="order.status === ORDER_WAIT_CONFIRM" @click="$router.push({ name: 'OrderDetail', params: { id: order.id } })">未收到／交易有问题</el-button>
               <el-button
-                v-if="[1, 5].includes(order.status)"
+                v-if="isBeforeDelivery(order)"
                 plain
                 type="danger"
                 :loading="actingId === order.id"
@@ -112,7 +112,7 @@
                 取消订单
               </el-button>
               <el-button
-                v-if="[2, 6].includes(order.status)"
+                v-if="[ORDER_WAIT_CONFIRM, ORDER_NEGOTIATING].includes(order.status)"
                 type="success"
                 :loading="actingId === order.id"
                 @click="handleConfirm(order)"
@@ -120,14 +120,14 @@
                 确认收到，完成交易
               </el-button>
               <el-button
-                v-if="order.status === 3 && !order.evaluated"
+                v-if="order.status === ORDER_COMPLETED && !order.evaluated"
                 plain
                 type="warning"
                 @click="openEval(order)"
               >
                 评价
               </el-button>
-              <el-tag v-if="order.status === 3 && order.evaluated" type="info">已评价</el-tag>
+              <el-tag v-if="order.status === ORDER_COMPLETED && order.evaluated" type="info">已评价</el-tag>
               <el-button
                 v-if="isHideable(order)"
                 plain
@@ -140,10 +140,10 @@
             </template>
 
             <template v-else>
-              <el-button v-if="order.status === 2" :disabled="reminderCooling(order)" :loading="actingId === order.id" @click="handleRemind(order)">{{ reminderCooling(order) ? '24小时内已提醒' : '提醒买家确认' }}</el-button>
-              <el-button v-if="order.status === 5" type="primary" :loading="actingId === order.id" @click="handleAccept(order)">接单</el-button>
+              <el-button v-if="order.status === ORDER_WAIT_CONFIRM" :disabled="reminderCooling(order)" :loading="actingId === order.id" @click="handleRemind(order)">{{ reminderCooling(order) ? '24小时内已提醒' : '提醒买家确认' }}</el-button>
+              <el-button v-if="order.status === ORDER_WAIT_ACCEPT" type="primary" :loading="actingId === order.id" @click="handleAccept(order)">接单</el-button>
               <el-button
-                v-if="order.status === 1 && order.meetupTime"
+                v-if="order.status === ORDER_WAIT_MEETUP && order.meetupTime"
                 type="primary"
                 :loading="actingId === order.id"
                 @click="handleDeliver(order)"
@@ -151,13 +151,13 @@
                 已交付，请买家确认
               </el-button>
               <el-button
-                v-if="[1, 5].includes(order.status)"
+                v-if="isBeforeDelivery(order)"
                 plain
                 type="warning"
                 :loading="actingId === order.id"
                 @click="handleReject(order)"
               >
-                {{ order.status === 5 ? '拒绝接单' : '取消交易' }}
+                {{ order.status === ORDER_WAIT_ACCEPT ? '拒绝接单' : '取消交易' }}
               </el-button>
               <el-button
                 v-if="isHideable(order)"
@@ -247,6 +247,7 @@ import {
 } from '@/api/order'
 import { evaluate } from '@/api/evaluation'
 import { reminderCooling } from '@/utils/orderDetail'
+import { ORDER_COMPLETED, ORDER_CANCELLED, ORDER_NEGOTIATING, ORDER_WAIT_ACCEPT, ORDER_WAIT_CONFIRM, ORDER_WAIT_MEETUP } from '@/utils/constant'
 import { formatDate, formatPrice } from '@/utils/format'
 
 const route = useRoute()
@@ -276,18 +277,18 @@ const tabOptions = [
 ]
 
 const statusMap = {
-  5: '待卖家接单',
-  1: '待面交',
-  6: '交易待协商',
-  2: '待买家确认',
-  3: '已完成',
-  4: '已取消'
+  [ORDER_WAIT_ACCEPT]: '待卖家接单',
+  [ORDER_WAIT_MEETUP]: '待面交',
+  [ORDER_NEGOTIATING]: '交易待协商',
+  [ORDER_WAIT_CONFIRM]: '待买家确认',
+  [ORDER_COMPLETED]: '已完成',
+  [ORDER_CANCELLED]: '已取消'
 }
 
 const selectedOrders = computed(() => list.value.filter(order => selectedIds.has(order.id)))
 const selectedHideOrders = computed(() => selectedOrders.value.filter(order => isHideable(order)))
-const selectedPendingOrders = computed(() => selectedOrders.value.filter(order => [1, 5].includes(order.status)))
-const selectedDeliverOrders = computed(() => selectedOrders.value.filter(order => order.status === 1 && order.meetupTime))
+const selectedPendingOrders = computed(() => selectedOrders.value.filter(order => isBeforeDelivery(order)))
+const selectedDeliverOrders = computed(() => selectedOrders.value.filter(order => order.status === ORDER_WAIT_MEETUP && order.meetupTime))
 const selectedCount = computed(() => selectedIds.size)
 
 onMounted(() => {
@@ -320,30 +321,35 @@ function handleTabChange(value) {
   fetchData()
 }
 
+const beforeDeliveryStatuses = [ORDER_WAIT_MEETUP, ORDER_WAIT_ACCEPT]
+function isBeforeDelivery(order) {
+  return beforeDeliveryStatuses.includes(order.status)
+}
+
 function statusColor(status) {
-  return { 5: 'warning', 1: 'primary', 2: 'primary', 3: 'success', 4: 'info' }[status] || 'info'
+  return { [ORDER_WAIT_ACCEPT]: 'warning', [ORDER_WAIT_MEETUP]: 'primary', [ORDER_WAIT_CONFIRM]: 'primary', [ORDER_COMPLETED]: 'success', [ORDER_CANCELLED]: 'info' }[status] || 'info'
 }
 
 function orderStatusText(order) {
-  if (order.status === 4 && order.cancelType === 2) {
+  if (order.status === ORDER_CANCELLED && order.cancelType === 2) {
     return '卖家拒绝交付'
   }
   return statusMap[order.status] || '未知状态'
 }
 
 function cancelNotice(order) {
-  if (order.status !== 4 || order.cancelType !== 2) {
+  if (order.status !== ORDER_CANCELLED || order.cancelType !== 2) {
     return ''
   }
   return order.cancelReason ? `拒绝原因：${order.cancelReason}` : '卖家拒绝交付'
 }
 
 function isHideable(order) {
-  return order.status === 3 || order.status === 4
+  return order.status === ORDER_COMPLETED || order.status === ORDER_CANCELLED
 }
 
 function isSelectable(order) {
-  return isHideable(order) || (tab.value === 'sold' && [1, 5].includes(order.status))
+  return isHideable(order) || (tab.value === 'sold' && isBeforeDelivery(order))
 }
 
 function toggleSelect(orderId, checked) {
@@ -398,7 +404,7 @@ async function handleCancel(order) {
   actingId.value = order.id
   try {
     await cancelOrder(order.id)
-    order.status = 4
+    order.status = ORDER_CANCELLED
     order.cancelType = 1
     order.cancelReason = '买家取消订单'
     ElMessage.success('订单已取消')
@@ -418,7 +424,7 @@ async function handleConfirm(order) {
   actingId.value = order.id
   try {
     await confirmOrder(order.id)
-    order.status = 3
+    order.status = ORDER_COMPLETED
     ElMessage.success('已确认完成')
   } finally {
     actingId.value = null
@@ -454,7 +460,7 @@ async function handleDeliver(order) {
   actingId.value = order.id
   try {
     await deliverOrder(order.id)
-    order.status = 2
+    order.status = ORDER_WAIT_CONFIRM
     ElMessage.success('已交付，等待买家确认')
   } finally {
     actingId.value = null
@@ -462,7 +468,7 @@ async function handleDeliver(order) {
 }
 
 async function handleReject(order) {
-  const result = await ElMessageBox.prompt('请输入原因，买家将收到通知', order.status === 5 ? '拒绝接单' : '取消交易', {
+  const result = await ElMessageBox.prompt('请输入原因，买家将收到通知', order.status === ORDER_WAIT_ACCEPT ? '拒绝接单' : '取消交易', {
     confirmButtonText: '确认拒绝',
     cancelButtonText: '取消',
     inputValidator: value => !!value?.trim() || '请填写原因',
@@ -476,7 +482,7 @@ async function handleReject(order) {
   actingId.value = order.id
   try {
     await rejectOrder(order.id, result.value?.trim() || '')
-    order.status = 4
+    order.status = ORDER_CANCELLED
     order.cancelType = 2
     order.cancelReason = result.value?.trim() || '卖家拒绝交付'
     ElMessage.success('已拒绝交付')
@@ -552,7 +558,7 @@ async function handleBatchReject() {
     onSuccessIds: successIds => {
       list.value.forEach(order => {
         if (successIds.includes(order.id)) {
-          order.status = 4
+          order.status = ORDER_CANCELLED
           order.cancelType = 2
           order.cancelReason = result.value?.trim() || '卖家拒绝交付'
         }
@@ -577,7 +583,7 @@ async function handleBatchDeliver() {
       successMessage: '批量交付完成',
       onSuccessIds: successIds => {
         list.value.forEach(order => {
-          if (successIds.includes(order.id)) order.status = 2
+          if (successIds.includes(order.id)) order.status = ORDER_WAIT_CONFIRM
         })
       }
     })

@@ -3,6 +3,7 @@ package com.secondhand.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.secondhand.constant.OrderStatus;
 import com.secondhand.entity.Evaluation;
 import com.secondhand.entity.Order;
 import com.secondhand.entity.Product;
@@ -64,8 +65,8 @@ public class EvaluationServiceImpl implements EvaluationService {
         if (order == null) {
             return Result.error("订单不存在");
         }
-        // 订单状态不是已完成（status=3）
-        if (order.getStatus() != 3) {
+        // 订单状态不是已完成
+        if (!OrderStatus.isCompleted(order.getStatus())) {
             return Result.error("仅已完成订单可评价");
         }
         // 当前用户不是买家

@@ -3,6 +3,7 @@ package com.secondhand.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.secondhand.constant.ProductStatus;
 import com.secondhand.entity.Favorite;
 import com.secondhand.entity.Product;
 import com.secondhand.entity.ProductImage;
@@ -67,7 +68,7 @@ public class FavoriteServiceImpl implements FavoriteService {
             return Result.error("商品不存在");
         }
         // 商品状态不是1（在售），不能收藏
-        if (product.getStatus() != 1) {
+        if (!ProductStatus.isOnSale(product.getStatus())) {
             return Result.error("商品已下架或已售完");
         }
 

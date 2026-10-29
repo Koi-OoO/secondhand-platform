@@ -1,6 +1,7 @@
 package com.secondhand.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.secondhand.constant.ProductStatus;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.secondhand.entity.Category;
 import com.secondhand.entity.Product;
@@ -211,10 +212,10 @@ public class ProductServiceImpl implements ProductService {
         boolean invisible;
         if (recordViewCount) {
             // 普通详情不展示已删除商品，仍允许查看下架或售罄商品。
-            invisible = Integer.valueOf(4).equals(product.getStatus());
+            invisible = ProductStatus.isDeleted(product.getStatus());
         } else {
             // AI只查询在售商品，不展示下架、售罄或缺少状态的商品。
-            invisible = !Integer.valueOf(1).equals(product.getStatus());
+            invisible = !ProductStatus.isOnSale(product.getStatus());
         }
         if (invisible) {
             return Result.error("商品不存在");
@@ -311,7 +312,7 @@ public class ProductServiceImpl implements ProductService {
 
         // 2. 补齐系统字段
         product.setSellerId(userId);      // 卖家ID
-        product.setStatus(1);              // 状态：1-在售
+        product.setStatus(ProductStatus.ON_SALE);              // 状态：在售
         product.setViewCount(0);           // 初始浏览量
         product.setLikeCount(0);           // 初始点赞量
         product.setCreateTime(new Date()); // 创建时间
@@ -351,7 +352,7 @@ public class ProductServiceImpl implements ProductService {
         // 2. 查询原商品并校验权限
         Product existing = productMapper.selectById(product.getId());
         // 商品不存在或已删除
-        if (existing == null || existing.getStatus() == 4) {
+        if (existing == null || ProductStatus.isDeleted(existing.getStatus())) {
             return Result.error("商品不存在");
         }
         // 只能修改自己的商品
@@ -359,7 +360,7 @@ public class ProductServiceImpl implements ProductService {
             return Result.error("无权修改他人发布的商品");
         }
         // 只能修改已下架的商品（防止在售商品被篡改）
-        if (existing.getStatus() != 2) {
+        if (!ProductStatus.isOffShelf(existing.getStatus())) {
             return Result.error("请先下架商品再修改");
         }
 
@@ -517,7 +518,7 @@ public class ProductServiceImpl implements ProductService {
             // 3. 查询商品，校验卖家身份和当前状态
             Product product = productMapper.selectById(productId);
             // 商品不存在或已删除
-            if (product == null || product.getStatus() == 4) {
+            if (product == null || ProductStatus.isDeleted(product.getStatus())) {
                 return Result.error("商品不存在");
             }
             // 只能操作自己的商品
@@ -525,12 +526,12 @@ public class ProductServiceImpl implements ProductService {
                 return Result.error("无权操作他人发布的商品");
             }
             // 只有在售状态才能下架
-            if (product.getStatus() != 1) {
+            if (!ProductStatus.isOnSale(product.getStatus())) {
                 return Result.error("商品当前状态不允许下架");
             }
 
             // 4. 更新商品状态和修改时间
-            product.setStatus(2);
+            product.setStatus(ProductStatus.OFF_SHELF);
             product.setUpdateTime(new Date());
             productMapper.updateById(product);
 
@@ -575,7 +576,7 @@ public class ProductServiceImpl implements ProductService {
             // 3. 查询商品，校验卖家身份和当前状态
             Product product = productMapper.selectById(productId);
             // 商品不存在或已删除
-            if (product == null || product.getStatus() == 4) {
+            if (product == null || ProductStatus.isDeleted(product.getStatus())) {
                 return Result.error("商品不存在");
             }
             // 只能操作自己的商品
@@ -583,7 +584,7 @@ public class ProductServiceImpl implements ProductService {
                 return Result.error("无权操作他人发布的商品");
             }
             // 只有下架状态才能上架
-            if (product.getStatus() != 2) {
+            if (!ProductStatus.isOffShelf(product.getStatus())) {
                 return Result.error("商品当前状态不允许上架");
             }
             // 库存不足无法上架
@@ -592,7 +593,7 @@ public class ProductServiceImpl implements ProductService {
             }
 
             // 4. 更新商品状态和修改时间
-            product.setStatus(1);
+            product.setStatus(ProductStatus.ON_SALE);
             product.setUpdateTime(new Date());
             productMapper.updateById(product);
 
@@ -634,15 +635,15 @@ public class ProductServiceImpl implements ProductService {
         if (!product.getSellerId().equals(userId)) {
             return Result.error("无权操作他人发布的商品");
         }
-        if (product.getStatus() == 1) {
+        if (ProductStatus.isOnSale(product.getStatus())) {
             return Result.error("请先下架商品再删除");
         }
-        if (product.getStatus() == 4) {
+        if (ProductStatus.isDeleted(product.getStatus())) {
             return Result.error("商品已删除");
         }
 
         // 3. 将商品标记为已删除，保留数据库记录
-        product.setStatus(4);
+        product.setStatus(ProductStatus.DELETED);
         product.setUpdateTime(new Date());
         productMapper.updateById(product);
 

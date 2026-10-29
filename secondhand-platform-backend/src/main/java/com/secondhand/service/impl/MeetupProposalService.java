@@ -2,6 +2,7 @@ package com.secondhand.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.secondhand.constant.OrderStatus;
 import com.secondhand.entity.MeetupProposal;
 import com.secondhand.entity.Order;
 import com.secondhand.mapper.MeetupProposalMapper;
@@ -48,7 +49,7 @@ public class MeetupProposalService {
         if (order == null || !order.getSellerId().equals(userId)) {
             return Result.error("仅订单卖家可提议时间");
         }
-        if (!Integer.valueOf(1).equals(order.getStatus())) {
+        if (!OrderStatus.isWaitMeetup(order.getStatus())) {
             return Result.error("仅待面交订单可以预约");
         }
 
@@ -111,7 +112,7 @@ public class MeetupProposalService {
         if (accept) {
             int changed = orderMapper.update(null, new UpdateWrapper<Order>()
                     .eq("id", order.getId())
-                    .eq("status", 1)
+                    .eq("status", OrderStatus.WAIT_MEETUP)
                     .set("meetup_time", proposal.getProposedTime()));
             if (changed != 1) {
                 return Result.error("订单状态已变化，请刷新");

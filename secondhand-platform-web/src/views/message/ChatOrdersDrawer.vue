@@ -7,11 +7,11 @@
       <div v-else-if="!orders.length" class="orders-empty"><h3>暂无交易订单</h3><p>你和对方可以继续聊天，购买商品后订单会显示在这里。</p></div>
       <div v-else class="peer-order-list">
         <button v-for="order in orders" :key="order.id" type="button" class="peer-order" @click="openOrder(order)">
-          <span class="peer-order__top"><span>{{ Number(order.buyerId) === Number(currentUserId) ? '我买到的' : '我卖出的' }}</span><el-tag :type="[1,2,5,6].includes(order.status) ? 'warning' : 'info'">{{ ORDER_STATUS[order.status] || '未知状态' }}</el-tag></span>
+          <span class="peer-order__top"><span>{{ Number(order.buyerId) === Number(currentUserId) ? '我买到的' : '我卖出的' }}</span><el-tag :type="isInProgress(order) ? 'warning' : 'info'">{{ ORDER_STATUS[order.status] || '未知状态' }}</el-tag></span>
           <span class="peer-order__product"><img v-if="order.productImage" :src="order.productImage" alt="商品封面" /><span v-else class="cover-empty">无图</span><span class="peer-order__copy"><strong>{{ order.productTitle || '商品信息未记录或已移除' }}</strong><span>数量 {{ order.quantity ?? '未记录' }} · 合计 {{ formatPrice(order.totalAmount) }}</span><small v-if="!order.snapshotTitle">历史订单：名称和图片为当前参考信息</small></span></span>
           <span class="peer-order__meta">订单号：{{ order.orderNo }}</span>
           <span class="peer-order__meta">面交地点：{{ order.address || '未记录' }}</span>
-          <span v-if="[1,2,5,6].includes(order.status)" class="peer-order__meta">面交时间：{{ order.meetupTime ? formatDate(order.meetupTime) : '尚未确认，双方私信协商' }}</span>
+          <span v-if="isInProgress(order)" class="peer-order__meta">面交时间：{{ order.meetupTime ? formatDate(order.meetupTime) : '尚未确认，双方私信协商' }}</span>
           <span class="peer-order__bottom"><time>{{ formatDate(order.createTime) }}</time><strong>查看订单 →</strong></span>
         </button>
       </div>
@@ -26,7 +26,7 @@ import { useOrderRefresh } from '@/composables/useOrderRefresh'
 import { useRouter } from 'vue-router'
 import { getOrdersWithUser } from '@/api/order'
 import { formatDate, formatPrice } from '@/utils/format'
-import { ORDER_STATUS } from '@/utils/constant'
+import { ORDER_STATUS, ORDER_NEGOTIATING, ORDER_WAIT_ACCEPT, ORDER_WAIT_CONFIRM, ORDER_WAIT_MEETUP } from '@/utils/constant'
 
 const props = defineProps({ modelValue: Boolean, peerId: Number, peerName: String, currentUserId: Number })
 const emit = defineEmits(['update:modelValue'])
@@ -34,6 +34,10 @@ const router = useRouter()
 const orders = ref([]), loading = ref(false), error = ref(''), page = ref(1), total = ref(0)
 const size = 10
 let version = 0
+const inProgressStatuses = [ORDER_WAIT_MEETUP, ORDER_WAIT_CONFIRM, ORDER_WAIT_ACCEPT, ORDER_NEGOTIATING]
+function isInProgress(order) {
+  return inProgressStatuses.includes(order.status)
+}
 async function load(silent = false) {
   const requestVersion = ++version
   if (!props.modelValue || !props.peerId) return

@@ -5,19 +5,19 @@
     <section v-else-if="error" class="detail-panel" role="alert"><h2>暂时无法查看订单</h2><p>{{ error }}</p><el-button @click="load">重试</el-button></section>
     <template v-else-if="order">
       <section class="detail-panel status-panel">
-        <div><el-tag :type="order.status === 3 ? 'success' : 'info'">{{ statusText }}</el-tag><p>订单号：{{ order.orderNo }}</p></div>
+        <div><el-tag :type="order.status === ORDER_COMPLETED ? 'success' : 'info'">{{ statusText }}</el-tag><p>订单号：{{ order.orderNo }}</p></div>
         <div class="detail-actions">
           <el-button :loading="acting" @click="contact">联系{{ isBuyer ? '卖家' : '买家' }}</el-button>
           <el-button v-for="action in actions" :key="action" :type="action === 'reject' || action === 'cancel' ? 'danger' : 'primary'" :disabled="acting || (action === 'remind' && reminderCooling(order))" @click="perform(action)">{{ labels[action] }}</el-button>
-          <el-button v-if="!isBuyer && order.status === 1" type="primary" @click="proposalVisible = true">{{ order.meetupTime ? '提议修改时间' : '提议面交时间' }}</el-button>
+          <el-button v-if="!isBuyer && order.status === ORDER_WAIT_MEETUP" type="primary" @click="proposalVisible = true">{{ order.meetupTime ? '提议修改时间' : '提议面交时间' }}</el-button>
           <el-button :loading="loading" @click="load">刷新</el-button>
         </div>
-        <p v-if="order.status === 5" class="progress-note">{{ isBuyer ? '等待卖家接单；接单后会收到通知。' : '买家已下单，请确认是否接单。接单后再协商面交时间。' }}</p>
-        <p v-else-if="order.status === 1" class="progress-note">{{ order.acceptTime ? '卖家已接单。' : '' }}{{ order.meetupTime ? '面交时间已确认，实际交付后方可声明交付。' : '尚未确认面交时间。请先私信协商，由卖家发送预约卡片、买家确认后，才能声明交付。' }}</p>
-        <p v-if="order.status === 2" class="progress-note">卖家声明已交付，尚待买家核实。未收到或有问题请反馈，不要提前确认完成。</p>
-        <p v-if="order.status === 2 && order.lastRemindTime" class="progress-note">上次确认提醒：{{ formatDate(order.lastRemindTime) }}。每24小时可提醒一次。</p>
-        <p v-if="order.status === 6" class="progress-note">买家已反馈问题，交易待协商，暂停确认提醒。请联系对方；解决问题并实际收到商品后，由买家确认完成。</p>
-        <p v-if="order.status === 4" class="cancel-reason">{{ order.cancelReason || '未记录取消原因' }}</p>
+        <p v-if="order.status === ORDER_WAIT_ACCEPT" class="progress-note">{{ isBuyer ? '等待卖家接单；接单后会收到通知。' : '买家已下单，请确认是否接单。接单后再协商面交时间。' }}</p>
+        <p v-else-if="order.status === ORDER_WAIT_MEETUP" class="progress-note">{{ order.acceptTime ? '卖家已接单。' : '' }}{{ order.meetupTime ? '面交时间已确认，实际交付后方可声明交付。' : '尚未确认面交时间。请先私信协商，由卖家发送预约卡片、买家确认后，才能声明交付。' }}</p>
+        <p v-if="order.status === ORDER_WAIT_CONFIRM" class="progress-note">卖家声明已交付，尚待买家核实。未收到或有问题请反馈，不要提前确认完成。</p>
+        <p v-if="order.status === ORDER_WAIT_CONFIRM && order.lastRemindTime" class="progress-note">上次确认提醒：{{ formatDate(order.lastRemindTime) }}。每24小时可提醒一次。</p>
+        <p v-if="order.status === ORDER_NEGOTIATING" class="progress-note">买家已反馈问题，交易待协商，暂停确认提醒。请联系对方；解决问题并实际收到商品后，由买家确认完成。</p>
+        <p v-if="order.status === ORDER_CANCELLED" class="cancel-reason">{{ order.cancelReason || '未记录取消原因' }}</p>
       </section>
       <section class="detail-panel">
         <h2>商品与交易约定</h2>
@@ -39,12 +39,12 @@
         </dl>
         <p class="transaction-note">请按订单地点面交，调整地点请在站内聊天中协商。线下验货并自行付款，平台不代收款、不提供交易担保，订单状态不代表付款状态。</p>
       </section>
-      <section v-if="order.deliveryIssue" class="detail-panel"><h2>{{ order.status === 6 ? '待协商的问题' : '问题反馈历史' }}</h2><p class="evaluation-content">{{ order.deliveryIssue }}</p><p>{{ formatDate(order.deliveryIssueTime) }}</p><p v-if="order.status === 3">买家后续已确认收到商品，交易已完成。</p></section>
+      <section v-if="order.deliveryIssue" class="detail-panel"><h2>{{ order.status === ORDER_NEGOTIATING ? '待协商的问题' : '问题反馈历史' }}</h2><p class="evaluation-content">{{ order.deliveryIssue }}</p><p>{{ formatDate(order.deliveryIssueTime) }}</p><p v-if="order.status === ORDER_COMPLETED">买家后续已确认收到商品，交易已完成。</p></section>
       <div class="detail-columns">
         <section class="detail-panel"><h2>交易记录</h2><ol class="order-timeline"><li v-for="event in timeline" :key="event.label"><strong>{{ event.label }}</strong><time>{{ event.time ? formatDate(event.time) : '未记录' }}</time></li></ol></section>
         <section class="detail-panel" id="evaluation"><h2>订单评价</h2>
           <template v-if="order.evaluation"><el-rate :model-value="order.evaluation.rating" disabled show-score /><p class="evaluation-content">{{ order.evaluation.content || '未填写文字评价' }}</p><p>{{ order.evaluation.anonymous ? '匿名评价' : '买家评价' }} · {{ formatDate(order.evaluation.createTime) }}</p></template>
-          <p v-else>{{ order.status === 3 ? '买家尚未评价' : '订单完成后，买家可以评价本次交易。' }}</p>
+          <p v-else>{{ order.status === ORDER_COMPLETED ? '买家尚未评价' : '订单完成后，买家可以评价本次交易。' }}</p>
           <el-button v-if="actions.includes('evaluate')" type="primary" @click="perform('evaluate')">去评价</el-button>
         </section>
       </div>
@@ -75,7 +75,7 @@ import { evaluate } from '@/api/evaluation'
 import { createConversation } from '@/api/message'
 import { useUserStore } from '@/stores/user'
 import { formatDate, formatPrice } from '@/utils/format'
-import { ORDER_STATUS } from '@/utils/constant'
+import { ORDER_STATUS, ORDER_COMPLETED, ORDER_CANCELLED, ORDER_NEGOTIATING, ORDER_WAIT_ACCEPT, ORDER_WAIT_CONFIRM, ORDER_WAIT_MEETUP } from '@/utils/constant'
 import { orderActions, orderTimeline, reminderCooling } from '@/utils/orderDetail'
 import ImageViewer from '@/components/common/ImageViewer.vue'
 
@@ -86,7 +86,7 @@ const evaluation = reactive({ rating: 5, content: '', anonymous: false })
 const isBuyer = computed(() => Number(order.value?.buyerId) === Number(userStore.userInfo?.id))
 const actions = computed(() => order.value ? orderActions(order.value, userStore.userInfo?.id) : [])
 const timeline = computed(() => order.value ? orderTimeline(order.value) : [])
-const statusText = computed(() => order.value?.cancelType === 2 && order.value?.status === 4 ? '卖家拒绝交付' : ORDER_STATUS[order.value?.status])
+const statusText = computed(() => order.value?.cancelType === 2 && order.value?.status === ORDER_CANCELLED ? '卖家拒绝交付' : ORDER_STATUS[order.value?.status])
 const labels = { remind: '提醒买家确认', issue: '未收到／交易有问题', accept: '接单', cancel: '取消订单', deliver: '已交付，请买家确认', reject: '拒绝/取消交易', confirm: '确认收到，完成交易', evaluate: '评价订单' }
 let loadVersion = 0
 async function load(silent = false) {
@@ -135,7 +135,7 @@ async function perform(action) {
   } catch { await load() } finally { acting.value = false }
 }
 async function sendProposal() {
-  if (proposing.value || !order.value || isBuyer.value || order.value.status !== 1) return
+  if (proposing.value || !order.value || isBuyer.value || order.value.status !== ORDER_WAIT_MEETUP) return
   if (!proposedTime.value || new Date(proposedTime.value.replace(' ', 'T')).getTime() <= Date.now()) { ElMessage.warning('请选择未来时间'); return }
   const targetOrder = { id: order.value.id, buyerId: order.value.buyerId, productId: order.value.productId }
   proposing.value = true

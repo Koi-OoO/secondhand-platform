@@ -10,6 +10,7 @@ import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.core.search.TotalHitsRelation;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.secondhand.constant.ProductStatus;
 import com.secondhand.entity.Category;
 import com.secondhand.entity.Product;
 import com.secondhand.entity.ProductImage;
@@ -106,7 +107,7 @@ public class ProductSearchService {
     private SearchRequest buildRequest(ProductSearchCriteria criteria) {
         // 1. 只搜索在售商品
         BoolQuery.Builder query = new BoolQuery.Builder()
-                .filter(filter -> filter.term(term -> term.field("status").value(1)));
+                .filter(filter -> filter.term(term -> term.field("status").value(ProductStatus.ON_SALE)));
 
         // 2. 有结构化关键词时按品牌/类型/型号分组，否则整体匹配标题和描述
         if (!criteria.keyword().isEmpty()) {
@@ -178,7 +179,7 @@ public class ProductSearchService {
 
     private boolean stillMatches(Product product, ProductSearchCriteria criteria, Map<Integer, Category> categoryMap) {
         // 1. 校验在售状态和价格
-        if (!Objects.equals(product.getStatus(), 1)) {
+        if (!ProductStatus.isOnSale(product.getStatus())) {
             return false;
         }
         if (product.getPrice() == null) {

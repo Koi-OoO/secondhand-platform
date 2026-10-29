@@ -30,21 +30,29 @@ export const PRODUCT_STATUS_COLOR = {
   3: 'warning'
 }
 
-/** 订单状态 */
+/** 订单状态值（与后端 com.secondhand.constant.OrderStatus 一一对应） */
+export const ORDER_WAIT_MEETUP = 1
+export const ORDER_WAIT_CONFIRM = 2
+export const ORDER_COMPLETED = 3
+export const ORDER_CANCELLED = 4
+export const ORDER_WAIT_ACCEPT = 5
+export const ORDER_NEGOTIATING = 6
+
+/** 订单状态文案 */
 export const ORDER_STATUS = {
-  1: '待面交',
-  2: '待买家确认',
-  3: '已完成',
-  4: '已取消',
-  5: '待卖家接单',
-  6: '交易待协商'
+  [ORDER_WAIT_MEETUP]: '待面交',
+  [ORDER_WAIT_CONFIRM]: '待买家确认',
+  [ORDER_COMPLETED]: '已完成',
+  [ORDER_CANCELLED]: '已取消',
+  [ORDER_WAIT_ACCEPT]: '待卖家接单',
+  [ORDER_NEGOTIATING]: '交易待协商'
 }
 
 /** 订单状态颜色 */
 export const ORDER_STATUS_COLOR = {
-  5: 'warning',
-  1: 'primary',
-  2: 'primary',
-  3: 'success',
-  4: 'info'
+  [ORDER_WAIT_ACCEPT]: 'warning',
+  [ORDER_WAIT_MEETUP]: 'primary',
+  [ORDER_WAIT_CONFIRM]: 'primary',
+  [ORDER_COMPLETED]: 'success',
+  [ORDER_CANCELLED]: 'info'
 }
