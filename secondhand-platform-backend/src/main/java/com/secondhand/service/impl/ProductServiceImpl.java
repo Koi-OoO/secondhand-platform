@@ -350,7 +350,7 @@ public class ProductServiceImpl implements ProductService {
         }
 
         // 2. 查询原商品并校验权限
-        Product existing = productMapper.selectById(product.getId());
+        Product existing = productMapper.selectByIdForUpdate(product.getId());
         // 商品不存在或已删除
         if (existing == null || ProductStatus.isDeleted(existing.getStatus())) {
             return Result.error("商品不存在");
@@ -499,6 +499,7 @@ public class ProductServiceImpl implements ProductService {
      * 下架商品
      */
     @Override
+    @Transactional
     public Result offShelf(Long userId, Long productId) {
         // 1. 校验用户和商品ID
         if (userId == null || productId == null || productId <= 0) {
@@ -516,7 +517,7 @@ public class ProductServiceImpl implements ProductService {
             }
 
             // 3. 查询商品，校验卖家身份和当前状态
-            Product product = productMapper.selectById(productId);
+            Product product = productMapper.selectByIdForUpdate(productId);
             // 商品不存在或已删除
             if (product == null || ProductStatus.isDeleted(product.getStatus())) {
                 return Result.error("商品不存在");
@@ -557,6 +558,7 @@ public class ProductServiceImpl implements ProductService {
      * 上架商品
      */
     @Override
+    @Transactional
     public Result onShelf(Long userId, Long productId) {
         // 1. 校验用户和商品ID
         if (userId == null || productId == null || productId <= 0) {
@@ -574,7 +576,7 @@ public class ProductServiceImpl implements ProductService {
             }
 
             // 3. 查询商品，校验卖家身份和当前状态
-            Product product = productMapper.selectById(productId);
+            Product product = productMapper.selectByIdForUpdate(productId);
             // 商品不存在或已删除
             if (product == null || ProductStatus.isDeleted(product.getStatus())) {
                 return Result.error("商品不存在");
@@ -628,7 +630,7 @@ public class ProductServiceImpl implements ProductService {
         }
 
         // 2. 查询商品，校验归属和商品状态
-        Product product = productMapper.selectById(productId);
+        Product product = productMapper.selectByIdForUpdate(productId);
         if (product == null) {
             return Result.error("商品不存在");
         }

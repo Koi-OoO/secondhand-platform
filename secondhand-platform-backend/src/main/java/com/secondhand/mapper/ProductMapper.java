@@ -19,6 +19,10 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface ProductMapper extends BaseMapper<Product> {
 
+    /** 写商品前读取最新数据并加行锁，锁随当前事务提交或回滚释放。 */
+    @Select("SELECT * FROM product WHERE id = #{productId} FOR UPDATE")
+    Product selectByIdForUpdate(@Param("productId") Long productId);
+
     /** 固定本次导入上界，防止持续新增商品使全量扫描无法结束。 */
     @Select("SELECT MAX(id) FROM product")
     Long selectMaxId();

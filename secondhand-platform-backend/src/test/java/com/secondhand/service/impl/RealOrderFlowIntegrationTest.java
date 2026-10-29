@@ -95,6 +95,46 @@ class RealOrderFlowIntegrationTest {
  @Autowired CategoryMapper categoryMapper;
  @Autowired MeetupProposalMapper proposalMapper;
  @Autowired MessageMapper messageMapper;
+ @Autowired PlatformTransactionManager transactionManager;
+
+ @Test
+ @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+ void productRowLockIsHeldUntilTransactionEnds() throws Exception {
+  // 只锁定既有商品，不修改数据；两个独立事务验证第二次读取必须等待。
+  Product existing = productMapper.selectOne(new QueryWrapper<Product>().last("LIMIT 1"));
+  assertThat(existing).isNotNull();
+  var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+  var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+  var started = new java.util.concurrent.CountDownLatch(1);
+  java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<Product>> pending =
+          new java.util.concurrent.atomic.AtomicReference<>();
+  try {
+   transaction.execute(status -> {
+    assertThat(productMapper.selectByIdForUpdate(existing.getId())).isNotNull();
+    pending.set(executor.submit(() -> transaction.execute(otherStatus -> {
+     started.countDown();
+     Product lockedProduct = productMapper.selectByIdForUpdate(existing.getId());
+     otherStatus.setRollbackOnly();
+     return lockedProduct;
+    })));
+    try {
+     assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+     org.assertj.core.api.Assertions.assertThatThrownBy(() -> pending.get().get(300, TimeUnit.MILLISECONDS))
+             .isInstanceOf(java.util.concurrent.TimeoutException.class);
+    } catch (InterruptedException exception) {
+     Thread.currentThread().interrupt();
+     throw new IllegalStateException(exception);
+    }
+    status.setRollbackOnly();
+    return null;
+   });
+   assertThat(pending.get().get(5, TimeUnit.SECONDS).getId()).isEqualTo(existing.getId());
+  } finally {
+   executor.shutdownNow();
+   assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+  }
+ }
+
  @Test void actualMysqlFlowRejectsSkippedStepsAndPreservesAgreementAndIssueHistory() {
   List<User> users=userMapper.selectList(new QueryWrapper<User>().eq("status",1).last("LIMIT 2"));
   assertThat(users).hasSize(2);Long buyer=users.get(0).getId(),seller=users.get(1).getId();

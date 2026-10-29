@@ -164,7 +164,7 @@ class OrderServiceImplTest {
         com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
             new org.apache.ibatis.builder.MapperBuilderAssistant(new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""), Order.class);
         Product product = product(40L, 30L, 1, new BigDecimal("99.00")); product.setStock(5);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         when(orderMapper.selectCount(any())).thenAnswer(invocation -> {
             LambdaQueryWrapper<Order> query = invocation.getArgument(0);
             query.getSqlSegment();
@@ -186,7 +186,7 @@ class OrderServiceImplTest {
     @Test
     void newOrdersWaitForSellerAcceptanceBeforeDelivery() {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00")); product.setStock(5);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         assertThat(service.createOrder(20L, 40L, 1, "Test address").getCode()).isEqualTo(200);
         ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
         verify(orderMapper).insert(saved.capture());
@@ -218,7 +218,7 @@ class OrderServiceImplTest {
         Order order = completedOrder(10L, 20L, 30L); order.setStatus(5); order.setProductId(40L); order.setQuantity(1);
         Product product = product(40L, 30L, 3, new BigDecimal("99.00")); product.setStock(0);
         when(orderMapper.selectById(10L)).thenReturn(order);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         assertThat(service.cancelOrder(20L, 10L).getCode()).isEqualTo(200);
         assertThat(order.getStatus()).isEqualTo(4);
         assertThat(product.getStock()).isEqualTo(1);
@@ -230,7 +230,7 @@ class OrderServiceImplTest {
         Order order = completedOrder(10L, 20L, 30L); order.setStatus(5); order.setProductId(40L); order.setQuantity(1);
         Product product = product(40L, 30L, 3, new BigDecimal("99.00")); product.setStock(0);
         when(orderMapper.selectById(10L)).thenReturn(order);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         assertThat(service.rejectOrder(30L, 10L, "无法按约交易").getCode()).isEqualTo(200);
         assertThat(order.getStatus()).isEqualTo(4);
         verify(notificationService).notifyUser(org.mockito.ArgumentMatchers.eq(20L), org.mockito.ArgumentMatchers.eq("order"),
@@ -245,7 +245,7 @@ class OrderServiceImplTest {
         com.secondhand.entity.ProductImage image = new com.secondhand.entity.ProductImage();
         image.setProductId(40L); image.setUrl("/original.jpg");
         when(productImageMapper.selectByProductIds(any())).thenReturn(java.util.List.of(image));
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         assertThat(service.createOrder(20L, 40L, 2, "Test address").getCode()).isEqualTo(200);
         verify(productChanges).publish(40L);
         ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
@@ -279,7 +279,7 @@ class OrderServiceImplTest {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00"));
         product.setStock(5);
         product.setTradeLocation(" 学校东门 ");
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         Result result = service.createOrder(20L, 40L, 1, "学校东门");
         assertThat(result.getCode()).isEqualTo(200);
         ArgumentCaptor<Order> saved = ArgumentCaptor.forClass(Order.class);
@@ -293,7 +293,7 @@ class OrderServiceImplTest {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00"));
         product.setStock(5);
         product.setTradeLocation(" ");
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         assertThat(service.createOrder(20L, 40L, 1, "任意地点").getCode()).isEqualTo(500);
         verify(orderMapper, never()).insert(any(Order.class));
         verify(productMapper, never()).updateById(any(Product.class));
@@ -304,7 +304,7 @@ class OrderServiceImplTest {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00"));
         product.setStock(5);
         product.setTradeLocation("图书馆");
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         assertThat(service.createOrder(20L, 40L, 1, "学校东门").getCode()).isEqualTo(500);
         verify(orderMapper, never()).insert(any(Order.class));
         verify(productMapper, never()).updateById(any(Product.class));
@@ -322,7 +322,7 @@ class OrderServiceImplTest {
     void createOrderRejectsWhenRequestedQuantityExceedsAvailableStock() {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00"));
         setRequiredField(product, "stock", 1);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         when(orderMapper.selectCount(any())).thenReturn(0L);
 
         Result result = invokeCreateOrder(20L, 40L, 2, "Test address");
@@ -336,7 +336,7 @@ class OrderServiceImplTest {
     void createOrderPersistsQuantityAndDeductsStock() {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00"));
         setRequiredField(product, "stock", 5);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
         when(orderMapper.selectCount(any())).thenReturn(0L);
 
         Result result = invokeCreateOrder(20L, 40L, 3, "Test address");
@@ -399,7 +399,7 @@ class OrderServiceImplTest {
         order.setStatus(5);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.rejectOrder(30L, 10L, "无法交易"))
                 .isInstanceOf(IllegalStateException.class);
-        verify(productMapper, never()).selectById(anyLong());
+        verify(productMapper, never()).selectByIdForUpdate(anyLong());
         verify(productMapper, never()).updateById(any(Product.class));
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any());
     }
@@ -439,7 +439,7 @@ class OrderServiceImplTest {
         setRequiredField(product, "stock", 3);
 
         when(orderMapper.selectById(10L)).thenReturn(order);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
 
         Result result = service.cancelOrder(20L, 10L);
         assertThat(ReflectionTestUtils.getField(order, "cancelTime")).isNotNull();
@@ -464,7 +464,7 @@ class OrderServiceImplTest {
         setRequiredField(product, "stock", 3);
 
         when(orderMapper.selectById(10L)).thenReturn(order);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
 
         Result result = service.rejectOrder(30L, 10L, "搴撳瓨涓嶈冻");
 
@@ -565,7 +565,7 @@ class OrderServiceImplTest {
         Product product = product(40L, 30L, 1, new BigDecimal("99.00"));
         setRequiredField(product, "stock", 2);
         when(orderMapper.selectById(10L)).thenReturn(order);
-        when(productMapper.selectById(40L)).thenReturn(product);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(product);
 
         Result result = service.batchRejectOrders(30L, Collections.singletonList(10L), "No stock");
 

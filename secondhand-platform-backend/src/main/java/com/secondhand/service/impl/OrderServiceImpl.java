@@ -276,8 +276,8 @@ public class OrderServiceImpl implements OrderService {
      * 执行下单逻辑（持有锁时调用）
      */
     private Result doCreateOrder(Long buyerId, Long productId, Integer quantity, String address) {
-        // 1. 查询商品，校验在售状态、买家身份和库存
-        Product product = productMapper.selectById(productId);
+        // 1. 锁定商品并读取最新库存，行锁一直保留到事务结束
+        Product product = productMapper.selectByIdForUpdate(productId);
         // 商品不存在
         if (product == null) {
             return Result.error("商品不存在");
@@ -958,8 +958,8 @@ public class OrderServiceImpl implements OrderService {
                 throw new IllegalStateException("库存回补繁忙，请重试");
             }
 
-            // 2. 查询商品，商品不存在时结束处理
-            Product product = productMapper.selectById(order.getProductId());
+            // 2. 锁定商品后读取最新库存，避免覆盖尚未提交的扣减或回补
+            Product product = productMapper.selectByIdForUpdate(order.getProductId());
             if (product == null) {
                 return;
             }

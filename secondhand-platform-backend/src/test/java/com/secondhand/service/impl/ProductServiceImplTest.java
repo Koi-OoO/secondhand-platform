@@ -226,7 +226,7 @@ class ProductServiceImplTest {
         existing.setSellerId(7L);
         existing.setCategoryId(3);
         existing.setStatus(2);
-        when(productMapper.selectById(40L)).thenReturn(existing);
+        when(productMapper.selectByIdForUpdate(40L)).thenReturn(existing);
     }
 
     @Test
